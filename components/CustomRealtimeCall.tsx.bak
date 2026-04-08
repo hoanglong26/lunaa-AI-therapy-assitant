@@ -1,0 +1,589 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { PhoneOff, PhoneCall } from "lucide-react";
+import { useChat } from "ai/react";
+import { motion } from "framer-motion";
+
+import { Message } from "ai";
+
+interface CustomRealtimeCallProps {
+  messages: Message[];
+  append: (message: any) => Promise<string | null | undefined>;
+  stop: () => void;
+  isLoading: boolean;
+}
+
+export default function CustomRealtimeCall({ messages, append, stop, isLoading }: CustomRealtimeCallProps) {
+  // ======= CẤU HÌNH =======
+  const ENABLE_FILLERS = true; // Bật/tắt câu đệm khi AI đang xử lý
+  // =========================
+
+  const [isActive, setIsActive] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [isListeningUser, setIsListeningUser] = useState(false);
+
+
+  // --------------------------------------------------------------------------
+  // REFS
+  // --------------------------------------------------------------------------
+  const isActiveRef = useRef(isActive);
+  const isLoadingRef = useRef(isLoading);
+
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+  useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const vadFrameRef = useRef<number>(0);
+  const aiSpeechStartTimeRef = useRef<number>(0);
+  const consecutiveBreachCountRef = useRef<number>(0); // Bộ đếm frame âm thanh lớn liên tục
+
+  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null); // Bộ ghi âm thực tế
+  const audioChunksRef = useRef<Blob[]>([]); // Chứa dữ liệu âm thanh thô
+  const isSttActiveRef = useRef(false); // Ngăn trigger nhiều lần
+  const latestFinalTranscriptRef = useRef("");
+  const sttDebounceRef = useRef<any>(null); // Bộ định thời đo khoảng lặng của người dùng
+  const currentFillerRef = useRef<HTMLAudioElement | null>(null);
+  const isThinkingRef = useRef<boolean>(false);
+
+  // Playback Queues
+  const processedTextIndexRef = useRef<number>(0);
+  const audioStoreMapRef = useRef<Map<number, AudioBuffer>>(new Map()); // Lưu trữ AudioBuffer theo index
+  const nextFetchIndexRef = useRef<number>(0); // Index cho lượt fetch tiếp theo
+  const nextPlayIndexRef = useRef<number>(0); // Index cho lượt play tiếp theo
+  const previousTextRef = useRef<string>(""); // Lưu câu văn trước đó để nối nhịp ElevenLabs
+  const currentEmotionRef = useRef<string>("fluent"); // Lưu cảm xúc hiện tại của lượt phản hồi
+  const isPlayingRef = useRef<boolean>(false);
+
+  const fillerMap = [
+    "/sounds/filler-1.mp3",
+    "/sounds/filler-2.mp3",
+    "/sounds/filler-3.mp3",
+    "/sounds/filler-4.mp3",
+    "/sounds/filler-5.mp3",
+    "/sounds/hum-short.mp3",
+    "/sounds/thinking-hum.mp3",
+  ];
+
+  // (Paralanguage SFX đã được loại bỏ - MiniMax Speech 2.8 xử lý trực tiếp trong giọng nói)
+
+  const stopAllThinking = useCallback(() => {
+    isThinkingRef.current = false;
+    if (currentFillerRef.current) {
+      currentFillerRef.current.pause();
+      currentFillerRef.current = null;
+    }
+  }, []);
+
+  const playContinuousFillers = useCallback(() => {
+    if (isThinkingRef.current) return;
+    isThinkingRef.current = true;
+
+    const runLoop = () => {
+      if (!isThinkingRef.current || !isActiveRef.current) return;
+
+      const randomIdx = Math.floor(Math.random() * fillerMap.length);
+      const audio = new Audio(fillerMap[randomIdx]);
+      audio.volume = 0.45;
+      currentFillerRef.current = audio;
+
+      audio.onended = () => {
+        currentFillerRef.current = null;
+        if (isThinkingRef.current) {
+          const delay = 1500 + Math.random() * 1000;
+          setTimeout(runLoop, delay);
+        }
+      };
+
+      audio.play().catch(() => {
+        isThinkingRef.current = false;
+      });
+    };
+
+    runLoop();
+  }, [isActiveRef]);
+
+  // --------------------------------------------------------------------------
+  // INTERRUPT AI (VAD / NGẮT LỜI)
+  // --------------------------------------------------------------------------
+  const interruptAI = useCallback(() => {
+    if (!isPlayingRef.current) return;
+
+    console.log("🛑 Bị ngắt lời! Dừng AI...");
+    stop(); // Stop LLM Generation
+
+    if (currentSourceRef.current) {
+      currentSourceRef.current.stop();
+      currentSourceRef.current.disconnect();
+      currentSourceRef.current = null;
+    }
+
+    // Xóa rỗng hàng chờ
+    audioStoreMapRef.current.clear();
+    nextFetchIndexRef.current = 0;
+    nextPlayIndexRef.current = 0;
+    previousTextRef.current = "";
+    currentEmotionRef.current = "fluent"; // Reset emotion
+    isPlayingRef.current = false;
+    setIsAiSpeaking(false);
+  }, [stop]);
+
+  // --------------------------------------------------------------------------
+  // THUẬT TOÁN VAD (Voice Activity Detection)
+  // --------------------------------------------------------------------------
+  const initVAD = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      micStreamRef.current = stream;
+
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioCtxRef.current = audioCtx;
+
+      const analyser = audioCtx.createAnalyser();
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      analyser.fftSize = 512;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkVolume = () => {
+        if (!audioCtxRef.current) return;
+
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const avgVolume = sum / bufferLength;
+        const VOLUME_THRESHOLD = 40; // Tăng ngưỡng (từ 25 lên 40) để tránh tiếng quạt
+        const CONSECUTIVE_FRAMES = 15; // Phải to liên tục trong 15 frames (~0.3s) mới ngắt
+
+        // Nếu volume > mức cho phép và AI đang nói thì ngắt lời AI!
+        if (avgVolume > VOLUME_THRESHOLD && isPlayingRef.current) {
+          // Cooldown 1s từ lúc AI bắt đầu nói để tránh Echo shock ban đầu
+          if (Date.now() - aiSpeechStartTimeRef.current > 1000) {
+            consecutiveBreachCountRef.current++;
+            if (consecutiveBreachCountRef.current > CONSECUTIVE_FRAMES) {
+              console.log("🔊 VAD Breach (Lọc tiếng ồn)! Ngắt Lunaa...");
+              interruptAI();
+              consecutiveBreachCountRef.current = 0; // Reset
+            }
+          }
+        } else {
+          consecutiveBreachCountRef.current = 0; // Reset nếu âm thanh nhỏ lại
+        }
+
+        vadFrameRef.current = requestAnimationFrame(checkVolume);
+      };
+
+      checkVolume();
+    } catch (e) {
+      console.error("VAD Setup Failed:", e);
+      alert("Bạn cần cấp quyền Microphone để thực hiện cuộc gọi!");
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // STT (Speech To Text)
+  // --------------------------------------------------------------------------
+  const initSTT = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true; // Thu âm liên tục, sửa lỗi không thu được câu dài
+    recognition.interimResults = true; // Bắt kết quả liên tục để đếm khoảng lặng
+    recognition.lang = "vi-VN";
+
+    recognition.onstart = () => {
+      setIsListeningUser(true);
+    };
+
+    recognition.onresult = (e: any) => {
+      // Ghép toàn bộ chuỗi thu được trong Session này
+      let finalStr = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        finalStr += e.results[i][0].transcript;
+      }
+
+      const text = finalStr.trim();
+      if (text.length > 0) {
+        latestFinalTranscriptRef.current = text;
+        console.log("🎙️ Đang nghe:", text);
+
+        // Mỗi khi người dùng phát ra tiếng, đặt lại đồng hồ đếm ngược
+        if (sttDebounceRef.current) clearTimeout(sttDebounceRef.current);
+
+        // Nếu người dùng ngừng nói quá 1.2 giây (1200ms), tự động đóng gói câu nói
+        sttDebounceRef.current = setTimeout(() => {
+          if (recognitionRef.current && isSttActiveRef.current) {
+            recognitionRef.current.stop(); // Kích hoạt onend
+          }
+        }, 1200);
+
+        // TÍNH NĂNG NGẮT LỜI: Nếu AI đang nói mà user lên tiếng, ngắt ngay lập tức!
+        if (isPlayingRef.current) {
+          interruptAI();
+        }
+      }
+    };
+
+    recognition.onend = async () => {
+      setIsListeningUser(false);
+
+      const transcript = latestFinalTranscriptRef.current;
+
+      // Nếu có text và AI KHÔNG ĐANG NÓI (tránh đè nhau)
+      if (transcript && !isPlayingRef.current) {
+        // Xử lý Audio Blob từ MediaRecorder
+        // Đợi dữ liệu audio cuối cùng được đóng gói
+        const processAudio = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          audioChunksRef.current = []; // Reset chunks
+
+          // Chuyển Blob thành Base64 để gửi qua API SDK
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result as string;
+
+            // Kích hoạt câu đệm nếu được bật
+            if (ENABLE_FILLERS) playContinuousFillers();
+
+            append({
+              role: "user",
+              content: transcript,
+              experimental_attachments: [{
+                url: base64,
+                contentType: 'audio/webm'
+              }]
+            });
+          };
+          reader.readAsDataURL(audioBlob);
+        };
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.onstop = processAudio;
+          mediaRecorderRef.current.stop();
+        } else {
+          processAudio();
+        }
+      }
+
+      latestFinalTranscriptRef.current = ""; // Reset
+      isSttActiveRef.current = false;
+
+      // TỰ ĐỘNG TÁI KHỞI ĐỘNG STT: Nếu WebKit tự ngắt vì im lặng quá 5s
+      // Ta phải bật lại ngay bằng cách đọc qua các Ref tĩnh để tránh React Stale Closure
+      if (isActiveRef.current && !isPlayingRef.current && !isLoadingRef.current) {
+        try {
+          isSttActiveRef.current = true;
+          recognition.start();
+        } catch (e) { }
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListeningUser(false);
+      isSttActiveRef.current = false;
+    };
+
+    recognitionRef.current = recognition;
+  };
+
+  const startSTT = useCallback(() => {
+    if (recognitionRef.current && !isSttActiveRef.current) {
+      try {
+        isSttActiveRef.current = true;
+        latestFinalTranscriptRef.current = "";
+        recognitionRef.current.start();
+
+        // Khởi động MediaRecorder song song
+        if (micStreamRef.current) {
+          const recorder = new MediaRecorder(micStreamRef.current, { mimeType: 'audio/webm' });
+          audioChunksRef.current = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunksRef.current.push(e.data);
+          };
+          recorder.start();
+          mediaRecorderRef.current = recorder;
+        }
+      } catch (e) {
+        isSttActiveRef.current = false;
+      }
+    }
+  }, []);
+
+  const stopSTT = useCallback(() => {
+    if (recognitionRef.current && isSttActiveRef.current) {
+      recognitionRef.current.abort(); // Tắt lập tức không lấy kết quả
+      isSttActiveRef.current = false;
+      setIsListeningUser(false);
+    }
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // QUEUE + PLAYBACK TTS STREAMING
+  // --------------------------------------------------------------------------
+  const playNextInQueue = async () => {
+    if (isPlayingRef.current || !audioCtxRef.current) return;
+
+    const currentIdx = nextPlayIndexRef.current;
+    const audioBuffer = audioStoreMapRef.current.get(currentIdx);
+
+    if (!audioBuffer) {
+      // Đang đợi audio của index này tải về...
+      return;
+    }
+
+    isPlayingRef.current = true;
+    setIsAiSpeaking(true);
+    stopAllThinking();
+
+    aiSpeechStartTimeRef.current = Date.now();
+    stopSTT(); // Tạm tắt nghe STT khi AI nói để micro không vọng lại tiếng AI
+
+    const source = audioCtxRef.current.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtxRef.current.destination);
+
+    source.onended = () => {
+      isPlayingRef.current = false;
+      setIsAiSpeaking(false);
+      audioStoreMapRef.current.delete(currentIdx); // Xóa cho nhẹ bộ nhớ
+      nextPlayIndexRef.current++; // Chuyển sang câu tiếp theo
+
+      // Kiểm tra xem câu tiếp theo đã sẵn sàng chưa
+      playNextInQueue();
+    };
+
+    currentSourceRef.current = source;
+    source.start(0);
+  };
+
+  const fetchTTSChunk = async (sentence: string, index: number, emotion: string) => {
+    try {
+      // Làm sạch text nhẹ nhàng, giữ lại sound tags (...)
+      const cleanSentence = sentence
+        .replace(/#{1,6}\s/g, "")
+        .replace(/\*/g, "")
+        .replace(/\[EMOTION:[^\]]+\]/g, ""); // Chỉ xóa tag emotion, giữ sound tags
+        
+      if (cleanSentence.trim().length <= 1) return;
+  
+      const res = await fetch("/api/tts/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          text: cleanSentence,
+          emotion: emotion 
+        }),
+      });
+
+      if (res.ok && audioCtxRef.current) {
+        const arrayBuffer = await res.arrayBuffer();
+        const audioBuffer = await audioCtxRef.current.decodeAudioData(arrayBuffer);
+
+        // Lưu vào Map đúng theo thứ tự index
+        audioStoreMapRef.current.set(index, audioBuffer);
+
+        // Kích hoạt chơi liền nếu chính là index đang chờ
+        if (!isPlayingRef.current && index === nextPlayIndexRef.current) {
+          playNextInQueue();
+        }
+      }
+    } catch (e) {
+      console.error(`TTS Fetch Error (Index ${index}):`, e);
+    }
+  };
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === "assistant") {
+      const fullContent = lastMsg.content || "";
+
+      // 1. Kiểm tra và bóc tách Emotion ở đầu tin nhắn
+      if (processedTextIndexRef.current === 0) {
+        const emotionMatch = fullContent.match(/^\[EMOTION:\s*([^\]]+)\]/);
+        if (emotionMatch) {
+          currentEmotionRef.current = emotionMatch[1].trim();
+          console.log("🎭 Detected Emotion:", currentEmotionRef.current);
+        } else {
+          currentEmotionRef.current = "fluent";
+        }
+      }
+
+      // Xóa tag emotion để tránh split nhầm
+      const contentWithoutEmotion = fullContent.replace(/^\[EMOTION:\s*([^\]]+)\]/, "");
+
+      // 2. Tách theo dấu câu truyền thống (. ! ? , \n -) bao gồm cả dấu phẩy để phản hồi nhanh
+      const chunks = contentWithoutEmotion.split(/(?<=[.!?,\n\-])\s+/);
+
+      // 3. Gửi fetch song song cho các chunk mới hoàn thiện
+      for (let i = processedTextIndexRef.current; i < chunks.length - 1; i++) {
+        const sentence = chunks[i].trim();
+        if (sentence.length > 0) {
+          fetchTTSChunk(sentence, nextFetchIndexRef.current++, currentEmotionRef.current);
+        }
+        processedTextIndexRef.current = i + 1;
+      }
+
+      // 4. Nếu Gemini đã loading xong hoàn toàn, xử lý nốt chunk cuối cùng
+      if (!isLoading && processedTextIndexRef.current < chunks.length) {
+        const lastSentence = chunks[chunks.length - 1].trim();
+        if (lastSentence.length > 0) {
+          fetchTTSChunk(lastSentence, nextFetchIndexRef.current++, currentEmotionRef.current);
+        }
+        processedTextIndexRef.current = chunks.length;
+      }
+    } else {
+      // Reset state khi bắt đầu hội thoại mới
+      processedTextIndexRef.current = 0;
+      nextFetchIndexRef.current = 0;
+      nextPlayIndexRef.current = 0;
+      audioStoreMapRef.current.clear();
+      previousTextRef.current = "";
+    }
+  }, [messages, isLoading, isActive]);
+
+  // --------------------------------------------------------------------------
+  // AUTO-STT MANAGER (Mồi lửa từ bên ngoài)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    let timeout: any;
+    if (isActive && !isAiSpeaking && !isLoading) {
+      if (!isSttActiveRef.current) {
+        timeout = setTimeout(() => {
+          latestFinalTranscriptRef.current = "";
+          startSTT();
+        }, 700);
+      }
+    } else {
+      stopSTT();
+    }
+    return () => clearTimeout(timeout);
+  }, [isActive, isAiSpeaking, isLoading, startSTT, stopSTT]);
+
+  // --------------------------------------------------------------------------
+  // MOUNT / UNMOUNT
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (isActive) {
+      initSTT();
+      initVAD();
+    } else {
+      // Cleanup all
+      cancelAnimationFrame(vadFrameRef.current);
+      if (currentSourceRef.current) currentSourceRef.current.stop();
+      if (audioCtxRef.current) audioCtxRef.current.close();
+      if (micStreamRef.current) micStreamRef.current.getTracks().forEach(track => track.stop());
+      stopAllThinking();
+      stopSTT();
+      stop(); // Ngừng gen
+      audioCtxRef.current = null;
+      isPlayingRef.current = false;
+      audioStoreMapRef.current.clear();
+      nextFetchIndexRef.current = 0;
+      nextPlayIndexRef.current = 0;
+      previousTextRef.current = "";
+      currentEmotionRef.current = "fluent";
+    }
+  }, [isActive]);
+
+  return (
+    <div className="flex flex-col items-center justify-center p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)]">
+      <div className="flex w-full max-w-lg items-center justify-between gap-4">
+
+        {/* Status Text */}
+        <div className="flex-1 text-left">
+          <h2 className="text-lg font-medium text-[var(--text-primary)]">Lunaa AI</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            {!isActive
+              ? "Đã ngắt kết nối"
+              : isAiSpeaking
+                ? "Đang nói..."
+                : isLoading
+                  ? "Lunaa đang suy nghĩ..."
+                  : isListeningUser
+                    ? "Đang nghe..."
+                    : "Đang chờ..."}
+          </p>
+        </div>
+
+        {/* Small avatar orb */}
+        <div className="relative flex items-center justify-center w-16 h-16 mx-4">
+          {/* Glow Effects */}
+          {isAiSpeaking && (
+            <motion.div
+              initial={{ scale: 1, opacity: 0.5 }}
+              animate={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+              className="absolute inset-0 rounded-full bg-[var(--accent-primary)] opacity-30"
+            />
+          )}
+
+          {isLoading && (
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ duration: 1, repeat: Infinity }}
+              className="absolute inset-0 rounded-full bg-purple-400 blur-lg"
+            />
+          )}
+
+          {isActive && !isAiSpeaking && !isLoading && (
+            <motion.div
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className={`absolute inset-2 rounded-full opacity-40 blur-md ${isListeningUser ? "bg-green-500" : "bg-[var(--accent-glow)]"
+                }`}
+            />
+          )}
+
+          <div
+            className={`z-10 w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg transition-all duration-500 ${isActive
+                ? isLoading
+                  ? "bg-gradient-to-tr from-purple-600 to-indigo-600 scale-125 animate-pulse shadow-purple-500/50"
+                  : "bg-gradient-to-tr from-purple-500 to-pink-500 scale-110"
+                : "bg-gray-800 scale-100"
+              }`}
+          >
+            {isLoading ? "🧠" : "🌙"}
+          </div>
+        </div>
+
+        {/* Action Button */}
+        <div className="flex-1 flex justify-end">
+          {!isActive ? (
+            <button
+              onClick={() => setIsActive(true)}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 text-white shadow-lg transition-all"
+            >
+              <PhoneCall size={20} />
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsActive(false)}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all"
+            >
+              <PhoneOff size={20} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
