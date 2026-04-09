@@ -8,20 +8,25 @@ import hark from "hark";
 
 interface CustomRealtimeCallProps {
   messages: Message[];
+  setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
   append: (message: any) => Promise<string | null | undefined>;
   stop: () => void;
   isLoading: boolean;
+  isViewVisible: boolean;
 }
 
 // Gemini Native Audio outputs PCM at 24kHz
 const AUDIO_SAMPLE_RATE = 24000;
 
-export default function CustomRealtimeCall({ messages, append }: CustomRealtimeCallProps) {
+export default function CustomRealtimeCall({ messages, setMessages, append, isViewVisible }: CustomRealtimeCallProps) {
   const [isActive, setIsActive] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [statusText, setStatusText] = useState("Nhấn để bắt đầu cuộc gọi");
   const [liveTranscript, setLiveTranscript] = useState("");
+
+  const currentAiMessageIdRef = useRef<string | null>(null);
+  const turnTextAccumulatorRef = useRef("");
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -55,7 +60,6 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
   }, []);
 
   const interruptAI = useCallback(() => {
-    console.log("[INTERRUPT] User interrupted AI");
     stopAllAudio();
     nextAudioTimeRef.current = audioCtxRef.current?.currentTime || 0;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -92,6 +96,19 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
       wsRef.current = ws;
 
       ws.onopen = () => {
+        const savedHistory = localStorage.getItem("lunaa-session-history");
+        if (savedHistory) {
+          try {
+            const history = JSON.parse(savedHistory);
+            const recentSummaries = history.slice(0, 3).map((h: any) => h.summary).join("\n---\n");
+            if (recentSummaries) {
+              ws.send(`SET_CONTEXT: Dưới đây là tóm tắt các buổi tham vấn gần đây nhất của người dùng này. Hãy sử dụng nó để thấu cảm hơn nếu bạn thấy liên quan: \n${recentSummaries}`);
+            }
+          } catch (e) {
+            console.error("Failed to send context:", e);
+          }
+        }
+
         setStatusText("Đang nghe...");
         ws.send('START_TURN');
       };
@@ -102,26 +119,54 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
             const data = JSON.parse(e.data);
             if (data.type === 'system' && data.content === 'ready') {
               setStatusText("Đang nghe...");
+            } else if (data.type === 'user_text') {
+              console.log("[USER]", data.content);
+              // Store user transcript in the chat bubbles list
+              append({
+                role: "user",
+                content: data.content,
+                createdAt: new Date()
+              });
             } else if (data.type === 'text') {
               if (fillerAudioRef.current) {
                 fillerAudioRef.current.pause();
                 fillerAudioRef.current = null;
               }
+              const chunk = data.content;
+              turnTextAccumulatorRef.current += chunk;
+              
+              console.log("[AI]", chunk);
+
+              // Live UI update in the call component
               setLiveTranscript(prev => {
-                const updated = prev + data.content;
+                const updated = prev + chunk;
                 return updated.length > 200 ? updated.substring(updated.length - 200) : updated;
               });
-            } else if (data.type === 'filler') {
-              if (!isAiSpeakingRef.current) {
-                const randomIdx = Math.floor(Math.random() * fillers.length);
-                const audio = new Audio(fillers[randomIdx]);
-                audio.volume = 0.5;
-                fillerAudioRef.current = audio;
-                audio.play().catch(() => {});
+
+              // Sync to chat history bubbles
+              if (!currentAiMessageIdRef.current) {
+                const newId = `ai_${Date.now()}`;
+                currentAiMessageIdRef.current = newId;
+                setMessages(prev => [
+                  ...prev,
+                  { 
+                    id: newId, 
+                    role: "assistant", 
+                    content: chunk,
+                    createdAt: new Date()
+                  } as Message
+                ]);
+              } else {
+                setMessages(prev => prev.map(m => 
+                  m.id === currentAiMessageIdRef.current 
+                    ? { ...m, content: turnTextAccumulatorRef.current } 
+                    : m
+                ));
               }
             } else if (data.type === 'turn_complete') {
-              // Gemini finished speaking — wait for audio queue to drain
-              console.log("[WS] Gemini turn complete");
+              // Reset the provisional message tracker for the next turn
+              currentAiMessageIdRef.current = null;
+              turnTextAccumulatorRef.current = "";
             }
           } catch (_err) { /* ignore parse errors */ }
         } else if (e.data instanceof Blob) {
@@ -197,11 +242,9 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
       speech.on('speaking', () => {
         if (ws.readyState === WebSocket.OPEN) {
           if (isAiSpeakingRef.current) {
-            console.log("[HARK] User interrupting AI");
             interruptAI();
           } else {
             ws.send('START_TURN');
-            console.log("[HARK] START_TURN");
           }
         }
       });
@@ -209,7 +252,6 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
       speech.on('stopped_speaking', () => {
         if (ws.readyState === WebSocket.OPEN && !isAiSpeakingRef.current) {
           ws.send('END_TURN');
-          console.log("[HARK] END_TURN");
           setStatusText("AI đang suy nghĩ...");
         }
       });
@@ -235,6 +277,44 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
     if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
     if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
   }, [stopAllAudio]);
+
+  // If not in call mode and no call is active, don't show anything
+  if (!isViewVisible && !isActive) return null;
+
+  // If call is active but user is in Chat tab, show a small persistent indicator
+  if (!isViewVisible && isActive) {
+    return (
+      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-3 bg-[var(--bg-card)] border border-[var(--accent-primary)]/30 p-2 pl-4 rounded-full shadow-2xl animate-in fade-in slide-in-from-bottom-5">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent-primary)] animate-pulse">
+            Đang trong cuộc gọi
+          </span>
+          <span className="text-xs text-[var(--text-secondary)] truncate max-w-[100px]">
+            {isAiSpeaking ? "Lunaa đang nói..." : "Đang nghe..."}
+          </span>
+        </div>
+        <div className="relative">
+          {isAiSpeaking && (
+            <motion.div
+              initial={{ scale: 1, opacity: 0.5 }}
+              animate={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 1, repeat: Infinity }}
+              className="absolute inset-x-0 rounded-full bg-[var(--accent-primary)] opacity-30"
+            />
+          )}
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg">
+            {isAiSpeaking ? "✋" : "🎤"}
+          </div>
+        </div>
+        <button 
+          onClick={stopCall}
+          className="w-10 h-10 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
+        >
+          <PhoneOff size={18} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)]">
@@ -269,15 +349,14 @@ export default function CustomRealtimeCall({ messages, append }: CustomRealtimeC
 
           <div
             onClick={() => { if (isAiSpeakingRef.current) interruptAI(); }}
-            className={`z-10 w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg transition-all duration-500 hover:scale-105 cursor-pointer ${
-              isActive
+            className={`z-10 w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg transition-all duration-500 hover:scale-105 cursor-pointer ${isActive
                 ? isListening && !isAiSpeaking
                   ? "bg-green-500 scale-125 animate-pulse"
                   : isAiSpeaking
                     ? "bg-gradient-to-tr from-orange-400 to-red-500 scale-110"
                     : "bg-gradient-to-tr from-blue-500 to-cyan-400 scale-110"
                 : "bg-gray-800 scale-100"
-            }`}
+              }`}
           >
             {isAiSpeaking ? "✋" : isActive ? <Mic size={20} className="text-white" /> : "🌙"}
           </div>

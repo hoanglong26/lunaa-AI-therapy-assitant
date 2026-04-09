@@ -31,7 +31,6 @@ app.prepare().then(() => {
   const wss = new WebSocketServer({ noServer: true });
 
   wss.on('connection', (ws) => {
-    console.log('Client connected to WebSocket Proxy');
     handleWebSocketConnection(ws);
   });
 

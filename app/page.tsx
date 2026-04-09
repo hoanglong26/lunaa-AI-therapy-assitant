@@ -19,6 +19,7 @@ export default function Home() {
   const [summaryText, setSummaryText] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isCallMode, setIsCallMode] = useState(false); // Toggle mode
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastAiMessageRef = useRef<string>("");
 
@@ -50,6 +51,18 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Load history from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("lunaa-session-history");
+    if (saved) {
+      try {
+        setSessionHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse history", e);
+      }
+    }
+  }, []);
+
   // Speak AI responses
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -74,7 +87,6 @@ export default function Home() {
 
   // End session → get summary
   const handleEndSession = async () => {
-    if (messages.length < 2) return;
     cancelSpeech();
     setShowSummary(true);
     setSummaryLoading(true);
@@ -87,7 +99,21 @@ export default function Home() {
         body: JSON.stringify({ messages }),
       });
       const data = await res.json();
-      setSummaryText(data.summary ?? "Không thể tạo tổng kết lúc này.");
+      const newSummary = data.summary ?? "Không thể tạo tổng kết lúc này.";
+      setSummaryText(newSummary);
+
+      // Save to history
+      if (data.summary) {
+        const historyEntry = {
+          id: `session_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          summary: data.summary,
+        };
+        const updatedHistory = [historyEntry, ...sessionHistory].slice(0, 50); // Keep last 50
+        setSessionHistory(updatedHistory);
+        localStorage.setItem("lunaa-session-history", JSON.stringify(updatedHistory));
+        console.log("[History] Session summary saved to localStorage ✅");
+      }
     } catch {
       setSummaryText("Đã xảy ra lỗi khi tổng kết. Vui lòng thử lại.");
     } finally {
@@ -193,28 +219,32 @@ export default function Home() {
               <div ref={messagesEndRef} />
             </main>
 
-            {isCallMode ? (
-              <CustomRealtimeCall 
-                messages={messages} 
-                append={append} 
-                stop={stop} 
-                isLoading={isLoading} 
-              />
-            ) : (
-              <ChatInput
-                input={input}
-                onInputChange={handleInputChange}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                isListening={isListening}
-                isSpeaking={isSpeaking}
-                transcript={transcript}
-                onStartListening={startListening}
-                onStopListening={stopListening}
-                onStop={stop}
-                isSupported={isSupported}
-              />
-            )}
+          <div className={isCallMode ? "block" : "hidden"}>
+            <CustomRealtimeCall 
+              messages={messages} 
+              setMessages={setMessages}
+              append={append} 
+              stop={stop} 
+              isLoading={isLoading}
+              isViewVisible={isCallMode}
+            />
+          </div>
+
+          {!isCallMode && (
+            <ChatInput
+              input={input}
+              onInputChange={handleInputChange}
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              isListening={isListening}
+              isSpeaking={isSpeaking}
+              transcript={transcript}
+              onStartListening={startListening}
+              onStopListening={stopListening}
+              onStop={stop}
+              isSupported={isSupported}
+            />
+          )}
       </div>
 
       {/* Summary modal */}

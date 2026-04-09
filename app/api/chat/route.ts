@@ -10,37 +10,25 @@ import { LUNA_SYSTEM_PROMPT } from "@/lib/prompt.mjs";
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
-  // Log để debug (xem trong terminal npm run dev)
-  console.log("--- CHAT REQUEST ---");
-  console.log("Messages count:", messages.length);
   const lastMsg = messages[messages.length - 1];
-  console.log("Last message role:", lastMsg?.role);
 
   // [RAG] Lấy tin nhắn cuối cùng để search kiến thức liên quan
   const lastMessageContent = typeof lastMsg?.content === 'string'
     ? lastMsg.content
     : lastMsg?.content?.find((p: any) => p.type === 'text')?.text || "";
 
-  console.log("Last message content preview:", lastMessageContent.substring(0, 50));
-
-  if (lastMsg?.experimental_attachments) {
-    console.log("Attachments count:", lastMsg.experimental_attachments.length);
-    lastMsg.experimental_attachments.forEach((a: any, i: number) => {
-      console.log(`Attachment ${i} type:`, a.contentType);
-    });
-  }
-
-  let ragContext = "";
+  let pastContext = "";
   if (lastMessageContent && process.env.PINECONE_API_KEY) {
     try {
-      const docs = await searchSimilar(lastMessageContent, 2);
+      // Tra cứu "không giới hạn" (lấy nhiều hơn để AI lọc)
+      const docs = await searchSimilar(lastMessageContent, 50);
       if (docs.length > 0) {
-        ragContext = `\n\n[KIẾN THỨC CHUYÊN MÔN / BỆNH ÁN CŨ KHẢ QUAN: 
+        pastContext = `\n\n[BỐI CẢNH CÁC PHIÊN THAM VẤN CŨ:
 ${docs.map(d => `- ${d.text}`).join('\n')}
-(Lưu ý: Dựa vào thông tin trên nếu nó liên quan để trả lời tự nhiên nhất, không cần nhắc tên Database hoặc nguồn gốc thông tin)]`;
+(Lưu ý: Chỉ sử dụng thông tin cũ nếu nó thực sự liên quan đến vấn đề hiện tại. Nếu đã tìm ra đúng vấn đề người dùng đang nhắc tới, hãy ngưng việc tra cứu thêm và tập trung vào đồng cảm/hỗ trợ dựa trên bối cảnh này.)]`;
       }
-    } catch {
-      // Ignored for graceful degradation
+    } catch (err) {
+      console.error("[RAG] Error searching similar sessions:", err);
     }
   }
 
@@ -80,24 +68,11 @@ ${docs.map(d => `- ${d.text}`).join('\n')}
     return m;
   });
 
-  console.log("Gemini is processing with multimodal data...");
-
   try {
     const result = streamText({
       model: google(GEMINI_MODEL_ID),
-      system: LUNA_SYSTEM_PROMPT + ragContext,
-      messages: formattedMessages,
-      onChunk: ({ chunk }) => {
-        if (chunk.type === "text-delta" && chunk.textDelta) {
-          process.stdout.write(chunk.textDelta);
-        }
-      },
-      onFinish: () => {
-        console.log("\nGemini finished responding.");
-      },
-      onError: (error) => {
-        console.error("\n[Gemini Stream Error]:", error);
-      }
+      system: LUNA_SYSTEM_PROMPT + pastContext,
+      messages: formattedMessages
     });
 
     return result.toDataStreamResponse();
