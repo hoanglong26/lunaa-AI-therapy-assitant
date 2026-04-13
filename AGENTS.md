@@ -1,5 +1,10 @@
 <!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+## 🧠 RAG System (graphify)
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+This project uses **graphify** as its localized RAG (Retrieval-Augmented Generation) system.
+
+- **Storage**: [/Users/longpham/Downloads/Empathy AI/lunaa-app/graphify-out](file:///Users/longpham/Downloads/Empathy%20AI/lunaa-app/graphify-out)
+- **Primary Source**: Before answering complex architecture or codebase questions, you MUST read [graphify-out/GRAPH_REPORT.md](file:///Users/longpham/Downloads/Empathy%20AI/lunaa-app/graphify-out/GRAPH_REPORT.md).
+- **Interactive Queries**: For deep discovery, use `/graphify query "<question>"` or `/graphify path "<node_a>" "<node_b>"`.
+- **Updates**: After making significant code changes, run `/graphify --update` to refresh the knowledge graph.
 <!-- END:nextjs-agent-rules -->

@@ -1,0 +1,1 @@
+{"nodes": [{"id": "nextjs", "label": "Next.js", "file_type": "document", "source_file": "README.md"}, {"id": "graphify_tool", "label": "Graphify", "file_type": "document", "source_file": "README.md"}, {"id": "vercel_deploy", "label": "Vercel Deployment", "file_type": "document", "source_file": "README.md"}], "edges": [], "hyperedges": []}

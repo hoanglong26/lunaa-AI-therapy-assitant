@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { generateText } from "ai";
 import { GEMINI_MODEL_ID } from "../config";
-import { upsertDocument } from "@/lib/vector-store";
+// upsertDocument removed — session summaries are now saved to local DB by the client
 
 
 export async function POST(req: Request) {
@@ -40,15 +40,8 @@ Hãy tóm tắt theo các mục sau:
 [Một đoạn ngắn ấm áp, khích lệ và động viên người dùng tiếp tục hành trình]`,
   });
 
-  // [VECTOR STORE] Lưu tóm tắt vào Pinecone để tra cứu sau này
-  try {
-    const summaryId = `summary_${Date.now()}`;
-    await upsertDocument(summaryId, text, {
-      type: "session_summary",
-      messageCount: messages.length
-    });
-  } catch (err) {
-  }
+  // Session summary is now persisted client-side via local-rag.ts (IndexedDB + Orama)
+  // No server-side write to Pinecone.
 
   return Response.json({ summary: text });
 }

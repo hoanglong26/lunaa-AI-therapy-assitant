@@ -1,0 +1,7 @@
+  warning: could not transcribe public/sounds/filler-dang-nghe.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+  warning: could not transcribe public/sounds/thinking-hum.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+  warning: could not transcribe public/sounds/filler-nghe.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+  warning: could not transcribe public/sounds/filler-um.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+  warning: could not transcribe public/sounds/hum-short.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+  warning: could not transcribe public/sounds/filler-hieu.mp3: Video transcription requires faster-whisper. Run: pip install 'graphifyy[video]'
+[]

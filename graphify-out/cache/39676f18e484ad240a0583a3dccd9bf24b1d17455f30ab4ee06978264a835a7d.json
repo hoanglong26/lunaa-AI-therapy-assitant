@@ -1,0 +1,1 @@
+{"nodes": [{"id": "types_hark_d_ts", "label": "hark.d.ts", "file_type": "code", "source_file": "types/hark.d.ts", "source_location": "L1"}], "edges": [{"source": "types_hark_d_ts", "target": "events", "relation": "imports_from", "confidence": "EXTRACTED", "source_file": "types/hark.d.ts", "source_location": "L2", "weight": 1.0}]}

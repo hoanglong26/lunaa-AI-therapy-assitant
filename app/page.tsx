@@ -11,8 +11,10 @@ import MessageBubble, {
 import ChatInput from "@/components/chat/ChatInput";
 import SummaryModal from "@/components/modals/SummaryModal";
 import CustomRealtimeCall from "@/components/CustomRealtimeCall";
+import LoadingOverlay from "@/components/LoadingOverlay";
 import { useSpeech } from "@/hooks/useSpeech";
 import { Phone, MessageCircle } from "lucide-react";
+import { initLocalDB, saveToLocalDB, searchLocalDB } from "@/lib/local-rag";
 
 export default function Home() {
   const [showSummary, setShowSummary] = useState(false);
@@ -20,8 +22,12 @@ export default function Home() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isCallMode, setIsCallMode] = useState(false); // Toggle mode
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState("Đang khởi động hệ thống...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastAiMessageRef = useRef<string>("");
+  const localContextRef = useRef<string | null>(null); // Holds local RAG context for current session
+  const [preloadedLocalContext, setPreloadedLocalContext] = useState<string>("");
 
   const {
     isListening,
@@ -38,20 +44,38 @@ export default function Home() {
     messages,
     input,
     handleInputChange,
-    handleSubmit,
+    handleSubmit: _handleSubmit,
     isLoading,
     stop,
     append,
     setMessages,
     setInput,
-  } = useChat({ api: "/api/chat" });
+  } = useChat({
+    api: "/api/chat",
+    // Inject localContext (from local RAG search) into every chat request
+    fetch: async (url, options) => {
+      // Use pre-loaded local context if available
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          if (preloadedLocalContext) {
+            body.localContext = preloadedLocalContext;
+          }
+          return window.fetch(url, { ...options, body: JSON.stringify(body) });
+        } catch {
+          // Fallback to normal fetch if body parsing fails
+        }
+      }
+      return window.fetch(url, options as RequestInit);
+    },
+  });
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load history from localStorage
+  // Load history from localStorage + init local RAG DB
   useEffect(() => {
     const saved = localStorage.getItem("lunaa-session-history");
     if (saved) {
@@ -61,7 +85,61 @@ export default function Home() {
         console.error("Failed to parse history", e);
       }
     }
+    // Initialize local DB (loads persisted docs from IndexedDB)
+    setIsInitializing(true);
+    initLocalDB().then(async () => {
+      try {
+        setLoadingMessage("Đang đọc bối cảnh từ các phiên trước...");
+        const { debugGetAllDocs } = await import("@/lib/local-rag");
+        const docs = await debugGetAllDocs();
+        
+        if (docs.length > 0) {
+          // Check cache: if doc count is same as last time, use cached summary
+          const cachedSummary = localStorage.getItem("lunaa-context-summary");
+          const cachedCount = localStorage.getItem("lunaa-context-count");
+          
+          if (cachedSummary && cachedCount && parseInt(cachedCount) === docs.length) {
+            console.log("🤖 [LocalRAG] Using cached context summary.");
+            setPreloadedLocalContext(cachedSummary);
+          } else {
+            console.log("🤖 [LocalRAG] Context changed or no cache. Summarizing...");
+            setLoadingMessage("AI đang tổng hợp hành trình của bạn...");
+            const texts = docs.map(d => d.text);
+            const response = await fetch("/api/summarize-context", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contextItems: texts }),
+            });
+            const data = await response.json();
+            if (data.summary) {
+              setPreloadedLocalContext(data.summary);
+              localStorage.setItem("lunaa-context-summary", data.summary);
+              localStorage.setItem("lunaa-context-count", docs.length.toString());
+              console.log("🤖 [LocalRAG] AI-Driven Context Summary:\n", data.summary);
+            }
+          }
+        } else {
+          console.log("🤖 [LocalRAG] No local history found.");
+        }
+      } catch (e) {
+        console.warn('[LocalRAG] Pre-load failed:', e);
+      } finally {
+        setIsInitializing(false);
+      }
+    }).catch((e) => {
+      console.warn('[LocalRAG] Init failed:', e);
+      setIsInitializing(false);
+    });
   }, []);
+
+  // Intercept form submit to inject local RAG context before sending to server
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    // Local RAG context is now pre-loaded and injected via fetch-override above
+    _handleSubmit(e);
+  };
 
   // Speak AI responses
   useEffect(() => {
@@ -104,15 +182,22 @@ export default function Home() {
 
       // Save to history
       if (data.summary) {
+        const summaryId = `session_${Date.now()}`;
         const historyEntry = {
-          id: `session_${Date.now()}`,
+          id: summaryId,
           timestamp: new Date().toISOString(),
           summary: data.summary,
         };
-        const updatedHistory = [historyEntry, ...sessionHistory].slice(0, 50); // Keep last 50
+        const updatedHistory = [historyEntry, ...sessionHistory].slice(0, 50);
         setSessionHistory(updatedHistory);
         localStorage.setItem("lunaa-session-history", JSON.stringify(updatedHistory));
-        console.log("[History] Session summary saved to localStorage ✅");
+
+        // Save to local RAG DB (replaces Pinecone write)
+        saveToLocalDB(summaryId, data.summary, {
+          type: 'session_summary',
+          messageCount: messages.length,
+          timestamp: historyEntry.timestamp,
+        }).catch((e) => console.warn('[LocalRAG] Save summary failed:', e));
       }
     } catch {
       setSummaryText("Đã xảy ra lỗi khi tổng kết. Vui lòng thử lại.");
@@ -134,7 +219,9 @@ export default function Home() {
       <div className="bg-ambient" />
 
       {/* App shell */}
-      <div className="relative z-10 flex flex-col h-screen max-w-3xl mx-auto">
+      <main className="relative z-10 flex flex-col h-screen max-w-3xl mx-auto">
+        {isInitializing && <LoadingOverlay message={loadingMessage} />}
+        
         <Header
           onEndSession={handleEndSession}
           isLoading={isLoading}
@@ -227,6 +314,7 @@ export default function Home() {
               stop={stop} 
               isLoading={isLoading}
               isViewVisible={isCallMode}
+              preloadedLocalContext={preloadedLocalContext}
             />
           </div>
 
@@ -245,7 +333,7 @@ export default function Home() {
               isSupported={isSupported}
             />
           )}
-      </div>
+      </main>
 
       {/* Summary modal */}
       <SummaryModal

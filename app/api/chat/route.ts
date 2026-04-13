@@ -8,7 +8,7 @@ export const maxDuration = 30;
 import { LUNA_SYSTEM_PROMPT } from "@/lib/prompt.mjs";
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { messages, localContext } = await req.json();
 
   const lastMsg = messages[messages.length - 1];
 
@@ -23,13 +23,19 @@ export async function POST(req: Request) {
       // Tra cứu "không giới hạn" (lấy nhiều hơn để AI lọc)
       const docs = await searchSimilar(lastMessageContent, 50);
       if (docs.length > 0) {
-        pastContext = `\n\n[BỐI CẢNH CÁC PHIÊN THAM VẤN CŨ:
+        pastContext = `\n\n[BỐI CẢNH CÁC PHIÊN THAM VẤN CŨ (Pinecone):
 ${docs.map(d => `- ${d.text}`).join('\n')}
-(Lưu ý: Chỉ sử dụng thông tin cũ nếu nó thực sự liên quan đến vấn đề hiện tại. Nếu đã tìm ra đúng vấn đề người dùng đang nhắc tới, hãy ngưng việc tra cứu thêm và tập trung vào đồng cảm/hỗ trợ dựa trên bối cảnh này.)]`;
+(Lưu ý: Chỉ sử dụng thông tin cũ nếu nó thực sự liên quan đến vấn đề hiện tại.)]`;
       }
     } catch (err) {
-      console.error("[RAG] Error searching similar sessions:", err);
+      console.error("[RAG] Error searching Pinecone:", err);
     }
+  }
+
+  // Merge Pinecone context (old sessions) with local context (recent sessions)
+  if (localContext && typeof localContext === 'string') {
+    const localSection = `\n\n[BỐI CẢNH CÁC PHIÊN THAM VẤN GẦN ĐÂY (Local):\n${localContext}\n(Ưu tiên thông tin này vì là dữ liệu mới nhất.)]`;
+    pastContext = pastContext + localSection;
   }
 
   // Ánh xạ lại tin nhắn để hỗ trợ Multimodal (Audio) một cách tường minh cho Gemini

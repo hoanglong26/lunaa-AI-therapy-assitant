@@ -13,12 +13,13 @@ interface CustomRealtimeCallProps {
   stop: () => void;
   isLoading: boolean;
   isViewVisible: boolean;
+  preloadedLocalContext?: string;
 }
 
 // Gemini Native Audio outputs PCM at 24kHz
 const AUDIO_SAMPLE_RATE = 24000;
 
-export default function CustomRealtimeCall({ messages, setMessages, append, isViewVisible }: CustomRealtimeCallProps) {
+export default function CustomRealtimeCall({ messages, setMessages, append, isViewVisible, preloadedLocalContext }: CustomRealtimeCallProps) {
   const [isActive, setIsActive] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -96,17 +97,30 @@ export default function CustomRealtimeCall({ messages, setMessages, append, isVi
       wsRef.current = ws;
 
       ws.onopen = () => {
+        let combinedContext = "";
+
+        // 1. Get simple history from localStorage (Last 2 summaries)
         const savedHistory = localStorage.getItem("lunaa-session-history");
         if (savedHistory) {
           try {
             const history = JSON.parse(savedHistory);
-            const recentSummaries = history.slice(0, 3).map((h: any) => h.summary).join("\n---\n");
+            const recentSummaries = history.slice(0, 2).map((h: any) => h.summary.substring(0, 400)).join("\n---\n");
             if (recentSummaries) {
-              ws.send(`SET_CONTEXT: Dưới đây là tóm tắt các buổi tham vấn gần đây nhất của người dùng này. Hãy sử dụng nó để thấu cảm hơn nếu bạn thấy liên quan: \n${recentSummaries}`);
+              combinedContext += `[TÓM TẮT PHIÊN TRƯỚC]:\n${recentSummaries}\n\n`;
             }
           } catch (e) {
-            console.error("Failed to send context:", e);
+            console.error("Failed to parse localStorage history:", e);
           }
+        }
+
+        // 2. Use Pre-loaded Local RAG Context (from startup)
+        if (preloadedLocalContext) {
+          combinedContext += `[CHI TIẾT TỪ LOCAL RAG]:\n${preloadedLocalContext}`;
+          console.log("[Voice Mode] Using pre-loaded Local RAG context.");
+        }
+
+        if (combinedContext.trim()) {
+          ws.send(`SET_CONTEXT: Dưới đây là bối cảnh từ các phiên tham vấn trước đó. Hãy sử dụng nó để thấu cảm hơn: \n${combinedContext}`);
         }
 
         setStatusText("Đang nghe...");
@@ -119,8 +133,14 @@ export default function CustomRealtimeCall({ messages, setMessages, append, isVi
             const data = JSON.parse(e.data);
             if (data.type === 'system' && data.content === 'ready') {
               setStatusText("Đang nghe...");
+            } else if (data.type === 'error') {
+              console.error("[Voice Mode Error]", data.content);
+              setStatusText("Lỗi kết nối: " + data.content);
+              setIsActive(false);
+              setIsListening(false);
             } else if (data.type === 'user_text') {
               console.log("[USER]", data.content);
+              setLiveTranscript(data.content); // Update live status text with the correct transcript
               // Store user transcript in the chat bubbles list
               append({
                 role: "user",
