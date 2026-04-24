@@ -12,18 +12,29 @@ import ChatInput from "@/components/chat/ChatInput";
 import SummaryModal from "@/components/modals/SummaryModal";
 import CustomRealtimeCall from "@/components/CustomRealtimeCall";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import HistorySidebar from "@/components/layout/HistorySidebar";
+import SessionDetailModal from "@/components/modals/SessionDetailModal";
+import NewSessionPromptModal from "@/components/modals/NewSessionPromptModal";
 import { useSpeech } from "@/hooks/useSpeech";
 import { Phone, MessageCircle } from "lucide-react";
-import { initLocalDB, saveToLocalDB, searchLocalDB } from "@/lib/local-rag";
+import { initLocalDB, saveToLocalDB, searchLocalDB, saveSessionToIDB, getAllSessionsFromIDB, type SessionHistory } from "@/lib/local-rag";
+
 
 export default function Home() {
   const [showSummary, setShowSummary] = useState(false);
   const [summaryText, setSummaryText] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [isCallMode, setIsCallMode] = useState(false); // Toggle mode
-  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<SessionHistory[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState("Đang khởi động hệ thống...");
+  
+  // History UI State
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<SessionHistory | null>(null);
+  const [showNewSessionPrompt, setShowNewSessionPrompt] = useState(false);
+  const [useRAGContext, setUseRAGContext] = useState(true);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastAiMessageRef = useRef<string>("");
   const localContextRef = useRef<string | null>(null); // Holds local RAG context for current session
@@ -54,11 +65,11 @@ export default function Home() {
     api: "/api/chat",
     // Inject localContext (from local RAG search) into every chat request
     fetch: async (url, options) => {
-      // Use pre-loaded local context if available
+      // Use pre-loaded local context if available and permitted
       if (options?.body) {
         try {
           const body = JSON.parse(options.body as string);
-          if (preloadedLocalContext) {
+          if (useRAGContext && preloadedLocalContext) {
             body.localContext = preloadedLocalContext;
           }
           return window.fetch(url, { ...options, body: JSON.stringify(body) });
@@ -75,16 +86,12 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load history from localStorage + init local RAG DB
+  // Load history from IndexedDB + init local RAG DB
   useEffect(() => {
-    const saved = localStorage.getItem("lunaa-session-history");
-    if (saved) {
-      try {
-        setSessionHistory(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse history", e);
-      }
-    }
+    getAllSessionsFromIDB().then((sessions) => {
+      setSessionHistory(sessions);
+    });
+
     // Initialize local DB (loads persisted docs from IndexedDB)
     setIsInitializing(true);
     initLocalDB().then(async () => {
@@ -125,6 +132,7 @@ export default function Home() {
         console.warn('[LocalRAG] Pre-load failed:', e);
       } finally {
         setIsInitializing(false);
+        setShowNewSessionPrompt(true);
       }
     }).catch((e) => {
       console.warn('[LocalRAG] Init failed:', e);
@@ -133,7 +141,7 @@ export default function Home() {
   }, []);
 
   // Intercept form submit to inject local RAG context before sending to server
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
@@ -180,25 +188,7 @@ export default function Home() {
       const newSummary = data.summary ?? "Không thể tạo tổng kết lúc này.";
       setSummaryText(newSummary);
 
-      // Save to history
-      if (data.summary) {
-        const summaryId = `session_${Date.now()}`;
-        const historyEntry = {
-          id: summaryId,
-          timestamp: new Date().toISOString(),
-          summary: data.summary,
-        };
-        const updatedHistory = [historyEntry, ...sessionHistory].slice(0, 50);
-        setSessionHistory(updatedHistory);
-        localStorage.setItem("lunaa-session-history", JSON.stringify(updatedHistory));
-
-        // Save to local RAG DB (replaces Pinecone write)
-        saveToLocalDB(summaryId, data.summary, {
-          type: 'session_summary',
-          messageCount: messages.length,
-          timestamp: historyEntry.timestamp,
-        }).catch((e) => console.warn('[LocalRAG] Save summary failed:', e));
-      }
+      // We defer actually saving to IDB to `handleSaveSession` when the user enters a title.
     } catch {
       setSummaryText("Đã xảy ra lỗi khi tổng kết. Vui lòng thử lại.");
     } finally {
@@ -206,11 +196,49 @@ export default function Home() {
     }
   };
 
+  const handleSaveSession = (title: string) => {
+    if (!summaryText) {
+      setShowSummary(false);
+      return;
+    }
+
+    const summaryId = `session_${Date.now()}`;
+    const historyEntry: SessionHistory = {
+      id: summaryId,
+      title: title || "Phiên tham vấn ẩn danh",
+      timestamp: new Date().toISOString(),
+      summary: summaryText,
+      messages: messages,
+    };
+    
+    // Save locally
+    const updatedHistory = [historyEntry, ...sessionHistory];
+    setSessionHistory(updatedHistory);
+    saveSessionToIDB(historyEntry);
+
+    // Save to LocalRAG Engine
+    saveToLocalDB(summaryId, summaryText, {
+      type: 'session_summary',
+      messageCount: messages.length,
+      timestamp: historyEntry.timestamp,
+    }).catch((e) => console.warn('[LocalRAG] Save summary failed:', e));
+    
+    setShowSummary(false);
+    handleNewSession();
+  };
+
   const handleNewSession = () => {
     setMessages([]);
     setSummaryText("");
     setShowSummary(false);
     cancelSpeech();
+  };
+
+  const handleNewSessionConfirm = (useRAG: boolean, mode: "voice" | "text") => {
+    setUseRAGContext(useRAG);
+    setIsCallMode(mode === "voice");
+    setShowNewSessionPrompt(false);
+    handleNewSession();
   };
 
   return (
@@ -227,35 +255,37 @@ export default function Home() {
           isLoading={isLoading}
           isSpeaking={isSpeaking}
           onCancelSpeech={cancelSpeech}
+          onOpenHistory={() => setIsHistoryOpen(true)}
+          onNewSessionBtnClick={() => setShowNewSessionPrompt(true)}
         />
 
-        {/* Mode Toggle Switch */}
-        <div className="flex justify-center py-4 mb-2">
-          <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-1 rounded-full flex items-center shadow-lg relative">
+        {/* Mode Toggle Switch (Disabled mid-session) */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
+          <div className="glass p-1 rounded-full flex items-center gap-1 border border-[var(--border-subtle)]">
             <button
-              onClick={() => setIsCallMode(false)}
-              className={`relative z-10 flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
-                !isCallMode ? "text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
+              onClick={() => messages.length === 0 && setIsCallMode(false)}
+              disabled={messages.length > 0}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                !isCallMode
+                  ? "bg-[var(--accent-primary)] text-white shadow-lg shadow-[var(--accent-glow)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              } ${messages.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              <MessageCircle size={18} />
-              Trò chuyện
+              <MessageCircle size={16} />
+              <span className="hidden sm:inline">Nhắn tin</span>
             </button>
             <button
-              onClick={() => { setIsCallMode(true); stop(); cancelSpeech(); }}
-              className={`relative z-10 flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
-                isCallMode ? "text-white" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
+              onClick={() => messages.length === 0 && setIsCallMode(true)}
+              disabled={messages.length > 0}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                isCallMode
+                  ? "bg-[var(--accent-primary)] text-white shadow-lg shadow-[var(--accent-glow)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              } ${messages.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              <Phone size={18} />
-              Gọi Điện
+              <Phone size={16} />
+              <span className="hidden sm:inline">Gọi điện</span>
             </button>
-            
-            {/* Sliding Pill Background */}
-            <div 
-              className={`absolute top-1 bottom-1 w-1/2 bg-[var(--accent-primary)] rounded-full transition-transform duration-300 ease-out z-0 shadow-md shadow-[var(--accent-glow)]`}
-              style={{ transform: isCallMode ? "translateX(100%)" : "translateX(0)" }}
-            />
           </div>
         </div>
 
@@ -314,7 +344,7 @@ export default function Home() {
               stop={stop} 
               isLoading={isLoading}
               isViewVisible={isCallMode}
-              preloadedLocalContext={preloadedLocalContext}
+              preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
             />
           </div>
 
@@ -341,7 +371,33 @@ export default function Home() {
         isLoading={summaryLoading}
         summary={summaryText}
         onClose={() => setShowSummary(false)}
-        onNewSession={handleNewSession}
+        onSave={handleSaveSession}
+      />
+
+      {/* History Detail modal */}
+      <SessionDetailModal
+        isOpen={!!selectedSession}
+        onClose={() => setSelectedSession(null)}
+        session={selectedSession}
+      />
+
+      {/* New Session Prompt modal */}
+      <NewSessionPromptModal
+        isOpen={showNewSessionPrompt}
+        onClose={() => setShowNewSessionPrompt(false)}
+        onConfirm={handleNewSessionConfirm}
+      />
+
+      {/* History Sidebar */}
+      <HistorySidebar
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        sessions={sessionHistory}
+        onSelectSession={setSelectedSession}
+        onNewSession={() => {
+          setIsHistoryOpen(false);
+          setShowNewSessionPrompt(true);
+        }}
       />
     </>
   );

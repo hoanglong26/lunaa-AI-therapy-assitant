@@ -15,8 +15,10 @@ import { openDB, type IDBPDatabase } from 'idb';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DB_NAME = 'lunaa-rag-store';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped to 2 to add sessions store
 const STORE_NAME = 'orama-state';
+const SESSIONS_STORE_NAME = 'sessions-store';
+
 const STATE_KEY = 'graph';
 const EMBEDDING_DIM = 384; // all-MiniLM-L6-v2 output dimension
 
@@ -29,7 +31,7 @@ export interface LocalDoc {
 }
 
 // ─── Singleton State ──────────────────────────────────────────────────────────
-let db: ReturnType<typeof create> extends Promise<infer T> ? T : never;
+let db: any;
 let idbInstance: IDBPDatabase | null = null;
 let worker: Worker | null = null;
 let workerReady = false;
@@ -73,6 +75,9 @@ async function getIDB(): Promise<IDBPDatabase> {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
+        }
+        if (!db.objectStoreNames.contains(SESSIONS_STORE_NAME)) {
+          db.createObjectStore(SESSIONS_STORE_NAME, { keyPath: 'id' });
         }
       },
     });
@@ -242,3 +247,61 @@ export async function debugGetAllDocs(): Promise<any[]> {
 if (typeof window !== 'undefined') {
   (window as any).debugLocalRAG = debugGetAllDocs;
 }
+
+// ─── Session History Storage ────────────────────────────────────────────────
+export interface SessionHistory {
+  id: string;
+  title?: string;
+  timestamp: string;
+  summary: string;
+  messages: any[];
+}
+
+export async function saveSessionToIDB(session: SessionHistory): Promise<void> {
+  try {
+    const idb = await getIDB();
+    await idb.put(SESSIONS_STORE_NAME, session);
+    console.log(`[LocalRAG] Saved full session ${session.id} to IndexedDB`);
+  } catch (e) {
+    console.error('[LocalRAG] Failed to save session:', e);
+  }
+}
+
+export async function getAllSessionsFromIDB(): Promise<SessionHistory[]> {
+  try {
+    const idb = await getIDB();
+    const sessions = await idb.getAll(SESSIONS_STORE_NAME) as SessionHistory[];
+    
+    // Fallback: also fetch older sessions from Orama store if they haven't been migrated
+    const oldDocs = await idb.getAll(STORE_NAME) as any[];
+    const sessionMap = new Map<string, SessionHistory>();
+    
+    // Add old docs first
+    for (const doc of oldDocs) {
+      try {
+        const meta = JSON.parse(doc.metadata || "{}");
+        if (meta.type === 'session_summary' || doc.id.startsWith('session_')) {
+          sessionMap.set(doc.id, {
+            id: doc.id,
+            timestamp: meta.timestamp || doc.createdAt || new Date().toISOString(),
+            summary: doc.text,
+            messages: [] // We don't have the old messages, but we have the summary
+          });
+        }
+      } catch (e) {
+        // ignore JSON parse errors
+      }
+    }
+    
+    // Override with full sessions
+    for (const s of sessions) {
+      sessionMap.set(s.id, s);
+    }
+    
+    return Array.from(sessionMap.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  } catch (e) {
+    console.error('[LocalRAG] Failed to get sessions:', e);
+    return [];
+  }
+}
+

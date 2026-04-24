@@ -141,12 +141,16 @@ export default function CustomRealtimeCall({ messages, setMessages, append, isVi
             } else if (data.type === 'user_text') {
               console.log("[USER]", data.content);
               setLiveTranscript(data.content); // Update live status text with the correct transcript
-              // Store user transcript in the chat bubbles list
-              append({
-                role: "user",
-                content: data.content,
-                createdAt: new Date()
-              });
+              // Store user transcript in the chat bubbles list without triggering api/chat
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: `user_${Date.now()}`,
+                  role: "user",
+                  content: data.content,
+                  createdAt: new Date()
+                } as Message
+              ]);
             } else if (data.type === 'text') {
               if (fillerAudioRef.current) {
                 fillerAudioRef.current.pause();

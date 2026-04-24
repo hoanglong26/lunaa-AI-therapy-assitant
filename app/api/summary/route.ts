@@ -36,8 +36,8 @@ Hãy tóm tắt theo các mục sau:
 ### Gợi ý cho thời gian tới
 [2-3 gợi ý cụ thể, thực tế để người dùng áp dụng]
 
-### Lời nhắn từ Luna
-[Một đoạn ngắn ấm áp, khích lệ và động viên người dùng tiếp tục hành trình]`,
+### 🔑 Từ khóa
+[3 đến 4 từ khóa mang tính cốt lõi của phiên tham vấn, BẮT BUỘC có dấu # phía trước, ví dụ: #LoAu, #CongViec, #MatNgu]`,
   });
 
   // Session summary is now persisted client-side via local-rag.ts (IndexedDB + Orama)

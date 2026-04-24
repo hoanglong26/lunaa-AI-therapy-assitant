@@ -3,13 +3,14 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Heart, Download, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import React, { useState, useEffect } from "react";
 
 interface SummaryModalProps {
   isOpen: boolean;
   isLoading: boolean;
   summary: string;
   onClose: () => void;
-  onNewSession: () => void;
+  onSave: (title: string) => void;
 }
 
 export default function SummaryModal({
@@ -17,15 +18,15 @@ export default function SummaryModal({
   isLoading,
   summary,
   onClose,
-  onNewSession,
+  onSave,
 }: SummaryModalProps) {
-  const handleDownload = () => {
-    const el = document.createElement("a");
-    const content = `Tổng kết buổi trò chuyện với Luna\n${new Date().toLocaleDateString("vi-VN")}\n\n${summary}`;
-    el.href = `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
-    el.download = `Luna-tong-ket-${Date.now()}.txt`;
-    el.click();
-  };
+  const [title, setTitle] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(`Phiên tham vấn ${new Date().toLocaleDateString("vi-VN")}`);
+    }
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -95,35 +96,42 @@ export default function SummaryModal({
                   </div>
                 </div>
               ) : (
-                <div className="prose-luna text-sm">
-                  <ReactMarkdown>{summary}</ReactMarkdown>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="session-title" className="text-sm font-medium text-[var(--accent-primary)]">
+                      Đặt tên cho phiên (Tùy chọn)
+                    </label>
+                    <input
+                      id="session-title"
+                      type="text"
+                      className="px-4 py-2.5 rounded-xl bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all"
+                      placeholder="VD: Bàn về áp lực học tập..."
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="prose-luna text-sm mt-2 p-4 bg-[var(--bg-main)] rounded-xl border border-[var(--border-subtle)]">
+                    <ReactMarkdown>{summary}</ReactMarkdown>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Footer actions */}
             {!isLoading && summary && (
-              <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center gap-3">
-                <button
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-all"
-                >
-                  <Download size={15} />
-                  Lưu tổng kết
-                </button>
-                <div className="flex-1" />
+              <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-end gap-3">
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)] transition-colors"
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)] transition-colors"
                 >
-                  Quay lại
+                  Xóa bỏ
                 </button>
                 <button
-                  onClick={onNewSession}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white shadow-md shadow-[var(--accent-glow)] hover:shadow-lg transition-all btn-glow"
+                  onClick={() => onSave(title)}
+                  className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-medium bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white shadow-md shadow-[var(--accent-glow)] hover:shadow-lg transition-all btn-glow"
                 >
-                  <RotateCcw size={14} />
-                  Buổi mới
+                  <Download size={16} />
+                  Hoàn tất & Lưu phiên
                 </button>
               </div>
             )}

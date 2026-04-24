@@ -1,13 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { PhoneOff, Volume2, VolumeX } from "lucide-react";
+import { PhoneOff, Volume2, VolumeX, History, Plus } from "lucide-react";
 
 interface HeaderProps {
   onEndSession: () => void;
   isLoading: boolean;
   isSpeaking: boolean;
   onCancelSpeech: () => void;
+  onOpenHistory: () => void;
+  onNewSessionBtnClick: () => void;
 }
 
 export default function Header({
@@ -15,15 +17,36 @@ export default function Header({
   isLoading,
   isSpeaking,
   onCancelSpeech,
+  onOpenHistory,
+  onNewSessionBtnClick,
 }: HeaderProps) {
   return (
     <header className="relative z-10 flex items-center justify-between px-6 py-4 glass border-b border-[var(--border-subtle)]">
-      {/* Luna identity */}
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-[var(--accent-glow)]">
-            L
-          </div>
+      {/* Luna identity & Toolbar */}
+      <div className="flex items-center gap-4">
+        {/* Sidebar Toggles */}
+        <div className="flex items-center gap-1 border-r border-[var(--border-subtle)] pr-3 mr-1">
+          <button
+            onClick={onOpenHistory}
+            className="p-2 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors"
+            title="Lịch sử tham vấn"
+          >
+            <History size={18} />
+          </button>
+          <button
+            onClick={onNewSessionBtnClick}
+            className="p-2 rounded-full text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:bg-[var(--bg-card-hover)] transition-colors"
+            title="Tạo phiên tham vấn mới"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-[var(--accent-glow)]">
+              L
+            </div>
           {/* Online indicator */}
           <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[var(--success)] rounded-full border-2 border-[var(--bg-card)]" />
         </div>
@@ -48,8 +71,9 @@ export default function Header({
           </p>
         </div>
       </div>
+    </div>
 
-      {/* Controls */}
+    {/* Controls */}
       <div className="flex items-center gap-2">
         {isSpeaking && (
           <motion.button
