@@ -75,28 +75,6 @@ export default function Header({
 
     {/* Controls */}
       <div className="flex items-center gap-2">
-        {isSpeaking && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            onClick={onCancelSpeech}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-all"
-            title="Tắt giọng nói"
-          >
-            <VolumeX size={14} />
-            <span>Tắt tiếng</span>
-          </motion.button>
-        )}
-
-        {!isSpeaking && (
-          <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-[var(--text-muted)]"
-          >
-            <Volume2 size={14} />
-            <span>Giọng nói bật</span>
-          </div>
-        )}
-
         <button
           onClick={onEndSession}
           className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:text-red-300 transition-all btn-glow"
