@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchSimilar } from '@/lib/vector-store';
+import { searchSimilar } from '@/lib/vector-store.mjs';
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
     // Ghép các đoạn text lại với nhau tạo thành Context cho LLM
     const contextText = matches
-      .map(match => `[Nội dung tham khảo]: ${match.text}`)
+      .map((match: any) => `[Nội dung tham khảo]: ${match.text}`)
       .join('\n\n');
 
     return NextResponse.json({ results: contextText });

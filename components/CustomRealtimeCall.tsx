@@ -341,19 +341,11 @@ export default function CustomRealtimeCall({ messages, setMessages, append, isVi
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)]">
-      <div className="flex w-full max-w-lg items-center justify-between gap-4">
-
-        {/* Status Text */}
-        <div className="flex-1 text-left">
-          <h2 className="text-lg font-medium text-[var(--text-primary)]">Lunaa AI</h2>
-          <p className="text-sm text-[var(--text-secondary)]">
-            {liveTranscript ? `"${liveTranscript}"` : statusText}
-          </p>
-        </div>
+    <div className="flex flex-col items-center justify-center p-4 w-full h-full">
+      <div className="flex w-full items-center justify-center gap-8">
 
         {/* Small avatar orb */}
-        <div className="relative flex items-center justify-center w-16 h-16 mx-4">
+        <div className="relative flex items-center justify-center w-16 h-16">
           {isListening && !isAiSpeaking && (
             <motion.div
               animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
@@ -387,7 +379,7 @@ export default function CustomRealtimeCall({ messages, setMessages, append, isVi
         </div>
 
         {/* Action Button */}
-        <div className="flex-1 flex justify-end">
+        <div>
           {!isActive ? (
             <button
               onClick={startCall}

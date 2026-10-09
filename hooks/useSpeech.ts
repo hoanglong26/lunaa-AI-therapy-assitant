@@ -22,7 +22,7 @@ export function useSpeech(): SpeechHook {
 
   useEffect(() => {
     const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       setIsSupported(true);
       const recognition = new SpeechRecognition();
@@ -30,9 +30,9 @@ export function useSpeech(): SpeechHook {
       recognition.interimResults = true;
       recognition.lang = "vi-VN";
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: any) => {
         const current = Array.from(event.results)
-          .map((result) => result[0].transcript)
+          .map((result: any) => result[0].transcript)
           .join("");
         setTranscript(current);
       };
@@ -97,42 +97,15 @@ export function useSpeech(): SpeechHook {
 
     setIsSpeaking(true);
 
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: cleanText }),
-      });
-
-      if (!res.ok) {
-        console.warn("ElevenLabs TTS failed, falling back to window.speechSynthesis");
-        setIsSpeaking(false);
-        fallbackSpeak(cleanText);
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(url);
-      };
-
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(url);
-        fallbackSpeak(cleanText);
-      };
-
-      await audio.play();
-    } catch (err) {
-      console.error("Audio API Error:", err);
-      setIsSpeaking(false);
-      fallbackSpeak(cleanText);
-    }
+    // Tạm thời ngắt gọi Minimax API theo yêu cầu
+    // try {
+    //   const res = await fetch("/api/tts", { ... })
+    //   ...
+    // } catch (err) { ... }
+    
+    setIsSpeaking(false);
+    // Nếu muốn dùng giọng mặc định của trình duyệt thay thế, có thể bỏ comment dòng dưới:
+    // fallbackSpeak(cleanText);
   }, [fallbackSpeak]);
 
   const cancelSpeech = useCallback(() => {

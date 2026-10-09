@@ -3,7 +3,7 @@
 // =========================================================
 
 // ─── GEMINI CONFIG ──────────────────────────────────────
-export const GEMINI_MODEL_ID = "gemini-2.5-flash";
+export const GEMINI_MODEL_ID = "gemini-3.8-flash";
 
 // ─── MINIMAX TTS CONFIG ─────────────────────────────────
 // Tài liệu: https://platform.minimaxi.com/docs/api-reference/speech-t2a-http

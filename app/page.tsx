@@ -11,6 +11,7 @@ import MessageBubble, {
 import ChatInput from "@/components/chat/ChatInput";
 import SummaryModal from "@/components/modals/SummaryModal";
 import CustomRealtimeCall from "@/components/CustomRealtimeCall";
+import ElevenLabsCall from "@/components/ElevenLabsCall";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import HistorySidebar from "@/components/layout/HistorySidebar";
 import SessionDetailModal from "@/components/modals/SessionDetailModal";
@@ -29,6 +30,10 @@ export default function Home() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState("Đang khởi động hệ thống...");
   
+  // Voice Engine State
+  const [voiceEngine, setVoiceEngine] = useState<'gemini' | 'elevenlabs'>('gemini');
+  const [elevenAgentId, setElevenAgentId] = useState<string>('');
+
   // History UI State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<SessionHistory | null>(null);
@@ -85,6 +90,16 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    fetch('/api/voice-engine')
+      .then(res => res.json())
+      .then(data => {
+        setVoiceEngine(data.engine);
+        setElevenAgentId(data.elevenAgentId);
+      })
+      .catch(err => console.error("Failed to fetch voice engine:", err));
+  }, []);
 
   // Load history from IndexedDB + init local RAG DB
   useEffect(() => {
@@ -239,6 +254,18 @@ export default function Home() {
     setIsCallMode(mode === "voice");
     setShowNewSessionPrompt(false);
     handleNewSession();
+
+    if (mode === "text") {
+      setTimeout(() => {
+        setMessages([
+          {
+            id: `greeting_${Date.now()}`,
+            role: "assistant",
+            content: "Xin chào, tôi là Luna. Tôi ở đây để lắng nghe và đồng hành cùng bạn. Hôm nay bạn cảm thấy thế nào?",
+          }
+        ]);
+      }, 100);
+    }
   };
 
   return (
@@ -259,38 +286,11 @@ export default function Home() {
           onNewSessionBtnClick={() => setShowNewSessionPrompt(true)}
         />
 
-        {/* Mode Toggle Switch (Disabled mid-session) */}
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
-          <div className="glass p-1 rounded-full flex items-center gap-1 border border-[var(--border-subtle)]">
-            <button
-              onClick={() => messages.length === 0 && setIsCallMode(false)}
-              disabled={messages.length > 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                !isCallMode
-                  ? "bg-[var(--accent-primary)] text-white shadow-lg shadow-[var(--accent-glow)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              } ${messages.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <MessageCircle size={16} />
-              <span className="hidden sm:inline">Nhắn tin</span>
-            </button>
-            <button
-              onClick={() => messages.length === 0 && setIsCallMode(true)}
-              disabled={messages.length > 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                isCallMode
-                  ? "bg-[var(--accent-primary)] text-white shadow-lg shadow-[var(--accent-glow)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              } ${messages.length > 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <Phone size={16} />
-              <span className="hidden sm:inline">Gọi điện</span>
-            </button>
-          </div>
-        </div>
+        {/* Mode Toggle Switch (Removed) */}
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
+        {!isCallMode ? (
+          <main className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
               {/* Welcome state */}
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center gap-6 text-center px-8">
@@ -335,20 +335,30 @@ export default function Home() {
 
               <div ref={messagesEndRef} />
             </main>
+        ) : (
+          <main className="flex-1 flex flex-col items-center justify-center">
+            {voiceEngine === 'elevenlabs' ? (
+              <ElevenLabsCall 
+                messages={messages} 
+                setMessages={setMessages} 
+                isViewVisible={isCallMode} 
+                agentId={elevenAgentId}
+              />
+            ) : (
+              <CustomRealtimeCall 
+                messages={messages} 
+                setMessages={setMessages}
+                append={append} 
+                stop={stop} 
+                isLoading={isLoading}
+                isViewVisible={isCallMode}
+                preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
+              />
+            )}
+          </main>
+        )}
 
-          <div className={isCallMode ? "block" : "hidden"}>
-            <CustomRealtimeCall 
-              messages={messages} 
-              setMessages={setMessages}
-              append={append} 
-              stop={stop} 
-              isLoading={isLoading}
-              isViewVisible={isCallMode}
-              preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
-            />
-          </div>
-
-          {!isCallMode && (
+        {!isCallMode && (
             <ChatInput
               input={input}
               onInputChange={handleInputChange}
