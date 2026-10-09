@@ -22,7 +22,7 @@ export function useSpeech(): SpeechHook {
 
   useEffect(() => {
     const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       setIsSupported(true);
       const recognition = new SpeechRecognition();
@@ -30,9 +30,9 @@ export function useSpeech(): SpeechHook {
       recognition.interimResults = true;
       recognition.lang = "vi-VN";
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: any) => {
         const current = Array.from(event.results)
-          .map((result) => result[0].transcript)
+          .map((result: any) => result[0].transcript)
           .join("");
         setTranscript(current);
       };

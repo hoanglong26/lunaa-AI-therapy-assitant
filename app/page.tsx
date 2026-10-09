@@ -11,6 +11,7 @@ import MessageBubble, {
 import ChatInput from "@/components/chat/ChatInput";
 import SummaryModal from "@/components/modals/SummaryModal";
 import CustomRealtimeCall from "@/components/CustomRealtimeCall";
+import ElevenLabsCall from "@/components/ElevenLabsCall";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import HistorySidebar from "@/components/layout/HistorySidebar";
 import SessionDetailModal from "@/components/modals/SessionDetailModal";
@@ -29,6 +30,10 @@ export default function Home() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState("Đang khởi động hệ thống...");
   
+  // Voice Engine State
+  const [voiceEngine, setVoiceEngine] = useState<'gemini' | 'elevenlabs'>('gemini');
+  const [elevenAgentId, setElevenAgentId] = useState<string>('');
+
   // History UI State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<SessionHistory | null>(null);
@@ -85,6 +90,16 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    fetch('/api/voice-engine')
+      .then(res => res.json())
+      .then(data => {
+        setVoiceEngine(data.engine);
+        setElevenAgentId(data.elevenAgentId);
+      })
+      .catch(err => console.error("Failed to fetch voice engine:", err));
+  }, []);
 
   // Load history from IndexedDB + init local RAG DB
   useEffect(() => {
@@ -322,15 +337,24 @@ export default function Home() {
             </main>
         ) : (
           <main className="flex-1 flex flex-col items-center justify-center">
-            <CustomRealtimeCall 
-              messages={messages} 
-              setMessages={setMessages}
-              append={append} 
-              stop={stop} 
-              isLoading={isLoading}
-              isViewVisible={isCallMode}
-              preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
-            />
+            {voiceEngine === 'elevenlabs' ? (
+              <ElevenLabsCall 
+                messages={messages} 
+                setMessages={setMessages} 
+                isViewVisible={isCallMode} 
+                agentId={elevenAgentId}
+              />
+            ) : (
+              <CustomRealtimeCall 
+                messages={messages} 
+                setMessages={setMessages}
+                append={append} 
+                stop={stop} 
+                isLoading={isLoading}
+                isViewVisible={isCallMode}
+                preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
+              />
+            )}
           </main>
         )}
 

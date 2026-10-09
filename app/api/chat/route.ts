@@ -1,6 +1,6 @@
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
-import { searchSimilar } from "@/lib/vector-store"; // [RAG] Nhập hàm tìm kiếm
+import { searchSimilar } from "@/lib/vector-store.mjs"; // [RAG] Nhập hàm tìm kiếm
 import { GEMINI_MODEL_ID } from "../config";
 
 export const maxDuration = 30;
@@ -21,10 +21,10 @@ export async function POST(req: Request) {
   if (lastMessageContent && process.env.PINECONE_API_KEY) {
     try {
       // Tra cứu "không giới hạn" (lấy nhiều hơn để AI lọc)
-      const docs = await searchSimilar(lastMessageContent, 50);
+      const docs = await searchSimilar(lastMessageContent, 20);
       if (docs.length > 0) {
         pastContext = `\n\n[BỐI CẢNH CÁC PHIÊN THAM VẤN CŨ (Pinecone):
-${docs.map(d => `- ${d.text}`).join('\n')}
+${docs.map((d: any) => `- ${d.text}`).join('\n')}
 (Lưu ý: Chỉ sử dụng thông tin cũ nếu nó thực sự liên quan đến vấn đề hiện tại.)]`;
       }
     } catch (err) {
