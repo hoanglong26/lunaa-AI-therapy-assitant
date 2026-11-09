@@ -1,0 +1,133 @@
+.lunaa-stage-wrap .ss-stage {
+  overflow: hidden;
+  background: var(--ss-well);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  --ss-canvas: #0e1110;
+  --ss-well: #121614;
+  --ss-surface: #161b19;
+  --ss-chrome: #191f1c;
+  --ss-raised: #202724;
+  --ss-line: rgba(255, 255, 255, 0.07);
+  --ss-line-faint: rgba(255, 255, 255, 0.04);
+  --ss-text-strong: #edf0ee;
+  --ss-text: #9ca6a0;
+  --ss-text-faint: #636e68;
+  --ss-icon: #8d9892;
+  --ss-icon-faint: #4b544f;
+  --ss-accent: #3d9a73;
+  --ss-accent-soft: rgba(61, 154, 115, 0.14);
+  --ss-ink-1: rgba(255, 255, 255, 0.05);
+  --ss-ink-2: rgba(255, 255, 255, 0.08);
+  --ss-ink-3: rgba(255, 255, 255, 0.11);
+}
+
+/* Framed window: anchored top and sides, bleeding cleanly off bottom */
+.lunaa-win {
+  position: absolute;
+  top: 24px;
+  left: 44px;
+  width: 552px;
+  height: 396px;
+}
+
+.lunaa-win-body {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+  padding: 16px 20px 60px;
+  background: var(--ss-surface);
+}
+
+.lunaa-thread {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 14px;
+  min-height: 0;
+  padding-bottom: 18px;
+  overflow: hidden;
+}
+
+.lunaa-turn--past {
+  display: grid;
+  gap: 7px;
+}
+
+.lunaa-past-q {
+  justify-self: end;
+}
+
+.lunaa-q {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lunaa-q .ss-text {
+  max-width: 78%;
+  white-space: normal;
+  text-wrap: pretty;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--ss-accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(61, 154, 115, 0.28);
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lunaa-thinking {
+  color: var(--ss-accent);
+  font-size: 12.5px;
+}
+
+.lunaa-a {
+  display: grid;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.lunaa-a[data-on] {
+  opacity: 1;
+}
+
+.lunaa-stream {
+  color: var(--ss-text-strong);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.lunaa-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  opacity: 0;
+  translate: 0 4px;
+  transition: opacity 0.35s ease, translate 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lunaa-sources[data-on] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.lunaa-source {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ss-raised);
+  box-shadow: inset 0 0 0 1px var(--ss-line);
+  color: var(--ss-text);
+  font-size: 11px;
+}
+
+.lunaa-source--accent {
+  color: #6bc49c;
+  box-shadow: inset 0 0 0 1px rgba(61, 154, 115, 0.3);
+}
+
+.lunaa-stage-wrap .ss-stage[data-layout="compact"] .lunaa-win {
+  left: 16px;
+  width: 326px;
+  height: 430px;
+}

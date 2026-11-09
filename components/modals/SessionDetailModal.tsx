@@ -1,6 +1,8 @@
+"use client";
+
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar, User, GitCommit } from "lucide-react";
+import { X, Calendar, FileText } from "lucide-react";
 import type { SessionHistory } from "@/lib/local-rag";
 import ReactMarkdown from "react-markdown";
 
@@ -26,53 +28,56 @@ export default function SessionDetailModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 modal-backdrop"
           />
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-2xl max-h-[85vh] bg-[var(--bg-main)] rounded-2xl shadow-2xl border border-[var(--border-subtle)] flex flex-col overflow-hidden"
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-full max-w-2xl max-h-[85vh] bg-[var(--ss-surface)] rounded-[var(--ss-radius-window)] shadow-[var(--ss-shadow-window)] border border-[var(--ss-line)] flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)] shrink-0">
+            <div className="flex items-center justify-between px-5 py-3.5 bg-[var(--ss-chrome)] border-b border-[var(--ss-line)] shrink-0">
               <div>
-                <h2 className="text-xl font-semibold text-[var(--text-primary)]">
-                  Chi tiết phiên tham vấn
-                </h2>
-                <div className="flex items-center gap-2 text-sm text-[var(--text-muted)] mt-1">
-                  <Calendar size={14} />
-                  {new Date(session.timestamp).toLocaleString("vi-VN", {
-                    dateStyle: "full",
-                    timeStyle: "short",
-                  })}
+                <div className="text-[14px] font-semibold text-[var(--ss-text-strong)]">
+                  {session.title || "Chi tiết phiên tham vấn"}
+                </div>
+                <div className="flex items-center gap-1.5 text-[11.5px] text-[var(--ss-text-faint)] mt-0.5">
+                  <Calendar size={12} strokeWidth={1.5} />
+                  <span>
+                    {new Date(session.timestamp).toLocaleString("vi-VN", {
+                      dateStyle: "full",
+                      timeStyle: "short",
+                    })}
+                  </span>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-colors"
+                className="w-7 h-7 rounded-[var(--ss-radius-sm)] flex items-center justify-center text-[var(--ss-icon)] hover:text-[var(--ss-text-strong)] hover:bg-[var(--ss-raised)] transition-colors"
               >
-                <X size={24} />
+                <X size={15} strokeWidth={1.5} />
               </button>
             </div>
 
             {/* Content (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-6 bg-[var(--bg-card)]">
-              <div className="flex items-center gap-2 mb-4 text-[var(--accent-primary)] font-medium">
-                <GitCommit size={18} />
-                <h3>Tổng kết bằng AI</h3>
+            <div className="flex-1 overflow-y-auto p-6 bg-[var(--ss-surface)]">
+              <div className="flex items-center gap-2 mb-3 text-[var(--ss-accent-text)] text-[12.5px] font-medium">
+                <FileText size={14} strokeWidth={1.5} />
+                <span>Bản ghi tổng kết</span>
               </div>
-              <div className="prose prose-invert max-w-none text-sm text-[var(--text-secondary)]">
+              <div className="prose-luna text-[13.5px] text-[var(--ss-text-strong)] p-4 rounded-[var(--ss-radius-lg)] bg-[var(--ss-canvas)] border border-[var(--ss-line)]">
                 <ReactMarkdown>{session.summary}</ReactMarkdown>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-[var(--border-subtle)] flex justify-end bg-[var(--bg-card)] shrink-0">
+            <div className="px-5 py-3 border-t border-[var(--ss-line)] flex justify-end bg-[var(--ss-chrome)] shrink-0">
               <button
                 onClick={onClose}
-                className="px-6 py-2 rounded-full font-medium text-[var(--text-primary)] bg-[var(--bg-main)] border border-[var(--border-subtle)] hover:bg-[var(--bg-card-hover)] transition-colors"
+                className="h-8 px-4 rounded-[var(--ss-radius-md)] text-[12.5px] font-medium text-[var(--ss-text-strong)] bg-[var(--ss-raised)] border border-[var(--ss-line)] hover:bg-[var(--ss-canvas)] transition-colors"
               >
                 Đóng
               </button>

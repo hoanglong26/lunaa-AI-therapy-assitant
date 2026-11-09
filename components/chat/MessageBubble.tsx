@@ -14,43 +14,39 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
-      className={`flex items-end gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
     >
-      {/* Avatar */}
-      {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center text-sm font-bold text-white shadow-md">
-          L
-        </div>
-      )}
+      {/* Subtle Speaker Label */}
+      <div className="flex items-center gap-1.5 mb-1.5 px-1">
+        {!isUser && (
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--ss-accent)]" />
+        )}
+        <span className="text-[11px] font-medium text-[var(--ss-text-faint)]">
+          {isUser ? "Bạn" : "Luna"}
+        </span>
+      </div>
 
-      {/* Bubble */}
+      {/* Surface Bubble */}
       <div
-        className={`max-w-[75%] sm:max-w-[65%] rounded-2xl px-4 py-3 shadow-sm ${
+        className={`max-w-[85%] sm:max-w-[72%] rounded-[14px] px-4 py-3 ${
           isUser
-            ? "bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white rounded-br-sm"
-            : "bg-[var(--bubble-ai)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-bl-sm"
+            ? "bg-[var(--ss-accent-soft)] text-[var(--ss-text-strong)] border border-[var(--ss-accent-border)] rounded-tr-[4px]"
+            : "bg-[var(--ss-surface)] text-[var(--ss-text-strong)] border border-[var(--ss-line)] rounded-tl-[4px]"
         }`}
       >
         {isUser ? (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+          <p className="text-[13.5px] leading-[1.6] whitespace-pre-wrap">
             {message.content}
           </p>
         ) : (
-          <div className="text-sm leading-relaxed prose-luna">
+          <div className="text-[13.5px] leading-[1.6] prose-luna">
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         )}
       </div>
-
-      {/* User avatar placeholder */}
-      {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-xs text-[var(--text-muted)]">
-          B
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -58,15 +54,18 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 export function TypingIndicator() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 8 }}
-      className="flex items-end gap-3"
+      exit={{ opacity: 0, y: 6 }}
+      className="flex flex-col items-start"
     >
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center text-sm font-bold text-white">
-        L
+      <div className="flex items-center gap-1.5 mb-1.5 px-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ss-accent)]" />
+        <span className="text-[11px] font-medium text-[var(--ss-text-faint)]">
+          Luna đang suy ngẫm
+        </span>
       </div>
-      <div className="bg-[var(--bubble-ai)] border border-[var(--border-subtle)] rounded-2xl rounded-bl-sm px-5 py-4">
+      <div className="bg-[var(--ss-surface)] border border-[var(--ss-line)] rounded-[14px] rounded-tl-[4px] px-4 py-3">
         <div className="flex gap-1.5 items-center h-4">
           <span className="typing-dot" />
           <span className="typing-dot" />

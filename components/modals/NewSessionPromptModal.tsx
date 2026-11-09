@@ -1,6 +1,8 @@
+"use client";
+
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BrainCircuit, MessageSquareText, Phone } from "lucide-react";
+import { Brain, MessageSquare, AudioLines, X } from "lucide-react";
 
 interface NewSessionPromptModalProps {
   isOpen: boolean;
@@ -24,77 +26,107 @@ export default function NewSessionPromptModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 modal-backdrop"
           />
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-md bg-[var(--bg-main)] rounded-3xl shadow-2xl border border-[var(--border-subtle)] overflow-hidden"
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-full max-w-md bg-[var(--ss-surface)] rounded-[var(--ss-radius-window)] shadow-[var(--ss-shadow-window)] border border-[var(--ss-line)] overflow-hidden"
           >
-            <div className="p-8 space-y-6">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-[var(--accent-primary)]/10 rounded-full flex items-center justify-center mx-auto text-[var(--accent-primary)] border border-[var(--accent-primary)]/20 shadow-[0_0_20px_var(--accent-glow)] mb-4">
-                  <BrainCircuit size={32} />
+            {/* 38px Window Chrome */}
+            <div className="h-[38px] px-4 bg-[var(--ss-chrome)] border-b border-[var(--ss-line)] flex items-center justify-between">
+              <span className="text-[12px] font-medium text-[var(--ss-text)]">
+                Thiết lập phiên tham vấn
+              </span>
+              <button
+                onClick={onClose}
+                className="w-6 h-6 rounded-[var(--ss-radius-sm)] flex items-center justify-center text-[var(--ss-icon)] hover:text-[var(--ss-text-strong)] hover:bg-[var(--ss-raised)] transition-colors"
+                title="Đóng"
+              >
+                <X size={14} strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <div className="text-[15px] font-semibold text-[var(--ss-text-strong)] mb-1">
+                  Bắt đầu không gian lắng nghe
                 </div>
-                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
-                  Thiết lập phiên tham vấn
-                </h2>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                  Bắt đầu một phiên tham vấn mới với Luna. Bạn có thể tùy chỉnh
-                  khả năng ghi nhớ của AI và phương thức giao tiếp.
+                <p className="text-[13px] text-[var(--ss-text)] leading-relaxed">
+                  Tùy chỉnh khả năng liên kết ký ức từ các buổi trò chuyện trước
+                  và chọn phương thức giao tiếp phù hợp với bạn hôm nay.
                 </p>
               </div>
 
-              <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-start gap-3">
+              {/* Memory Toggle Row */}
+              <label
+                htmlFor="rag-toggle"
+                className="bg-[var(--ss-canvas)] border border-[var(--ss-line)] hover:border-[var(--ss-accent-border)] rounded-[var(--ss-radius-lg)] p-3.5 flex items-start gap-3 cursor-pointer transition-colors"
+              >
                 <input
                   type="checkbox"
                   id="rag-toggle"
                   checked={useRAG}
                   onChange={(e) => setUseRAG(e.target.checked)}
-                  className="mt-1 w-5 h-5 rounded border-[var(--border-subtle)] bg-[var(--bg-main)] text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] accent-[var(--accent-primary)] cursor-pointer"
+                  className="mt-0.5 w-4 h-4 rounded border-[var(--ss-line)] bg-[var(--ss-surface)] accent-[var(--ss-accent)] cursor-pointer"
                 />
-                <label htmlFor="rag-toggle" className="cursor-pointer">
-                  <span className="block text-sm font-medium text-[var(--text-primary)] mb-0.5">
-                    Ghi nhớ bối cảnh (Recommended)
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5 text-[13px] font-medium text-[var(--ss-text-strong)]">
+                    <Brain
+                      size={14}
+                      strokeWidth={1.5}
+                      className="text-[var(--ss-accent-text)]"
+                    />
+                    <span>Liên kết ký ức cục bộ (Khuyên dùng)</span>
+                  </div>
+                  <span className="block text-[12px] text-[var(--ss-text-faint)] mt-1 leading-relaxed">
+                    Luna sẽ đối chiếu các ghi chú tổng kết trong quá khứ để
+                    thấu hiểu mạch câu chuyện của bạn.
                   </span>
-                  <span className="block text-xs text-[var(--text-muted)]">
-                    Luna sẽ triệu hồi các dữ kiện từ các phiên tham vấn trong quá
-                    khứ để hiểu bạn sâu sắc hơn. Bỏ chọn nếu bạn muốn bắt đầu một
-                    trang giấy trắng hoàn toàn.
-                  </span>
-                </label>
-              </div>
+                </div>
+              </label>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              {/* Mode Selection */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
                 <button
+                  type="button"
                   onClick={() => onConfirm(useRAG, "text")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl font-medium text-[var(--text-primary)] bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:bg-[var(--bg-card-hover)] hover:border-[var(--accent-primary)]/50 transition-all group"
+                  className="flex flex-col items-start gap-2.5 p-3.5 rounded-[var(--ss-radius-lg)] bg-[var(--ss-raised)] hover:bg-[var(--ss-accent-soft)] border border-[var(--ss-line)] hover:border-[var(--ss-accent-border)] transition-colors text-left group"
                 >
-                  <div className="p-2 rounded-full bg-[var(--bg-main)] group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)] transition-colors">
-                    <MessageSquareText size={20} />
+                  <div className="w-8 h-8 rounded-[var(--ss-radius-md)] bg-[var(--ss-surface)] border border-[var(--ss-line)] flex items-center justify-center text-[var(--ss-icon)] group-hover:text-[var(--ss-accent-text)] transition-colors">
+                    <MessageSquare size={16} strokeWidth={1.5} />
                   </div>
-                  Nhắn tin Text
+                  <div>
+                    <div className="text-[13px] font-medium text-[var(--ss-text-strong)]">
+                      Hội thoại văn bản
+                    </div>
+                    <div className="text-[11px] text-[var(--ss-text-faint)] mt-0.5">
+                      Nhắn tin & đọc phản hồi
+                    </div>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => onConfirm(useRAG, "voice")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl font-medium text-white bg-[var(--accent-primary)] border border-transparent shadow-[0_4px_14px_0_var(--accent-glow)] hover:shadow-[0_6px_20px_0_var(--accent-glow)] transition-all group hover:opacity-95"
+                  className="flex flex-col items-start gap-2.5 p-3.5 rounded-[var(--ss-radius-lg)] bg-[var(--ss-accent-soft)] hover:bg-[var(--ss-accent)] border border-[var(--ss-accent-border)] transition-colors text-left group"
                 >
-                  <div className="p-2 rounded-full bg-white/20">
-                    <Phone size={20} />
+                  <div className="w-8 h-8 rounded-[var(--ss-radius-md)] bg-[var(--ss-surface)]/80 border border-[var(--ss-accent-border)] flex items-center justify-center text-[var(--ss-accent-text)] group-hover:text-white transition-colors">
+                    <AudioLines size={16} strokeWidth={1.5} />
                   </div>
-                  Gọi Voice AI
+                  <div>
+                    <div className="text-[13px] font-medium text-[var(--ss-text-strong)] group-hover:text-white">
+                      Voice Studio
+                    </div>
+                    <div className="text-[11px] text-[var(--ss-accent-text)] group-hover:text-white/80 mt-0.5">
+                      Trò chuyện giọng nói trực tiếp
+                    </div>
+                  </div>
                 </button>
               </div>
-
-              <button
-                onClick={onClose}
-                className="w-full text-center text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                Hủy
-              </button>
             </div>
           </motion.div>
         </div>

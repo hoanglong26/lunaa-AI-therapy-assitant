@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { PhoneOff, PhoneCall, Mic } from "lucide-react";
+import { PhoneOff, PhoneCall, Mic, AudioLines } from "lucide-react";
 import { motion } from "framer-motion";
 import { Message } from "ai";
 import { useConversation, ConversationProvider } from '@elevenlabs/react';
@@ -85,92 +85,112 @@ function InnerElevenLabsCall({ messages, setMessages, isViewVisible, agentId }: 
 
   if (!isViewVisible && isActive) {
     return (
-      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-3 bg-[var(--bg-card)] border border-[var(--accent-primary)]/30 p-2 pl-4 rounded-full shadow-2xl animate-in fade-in slide-in-from-bottom-5">
+      <div className="fixed bottom-24 right-6 z-50 flex items-center gap-3 bg-[var(--ss-raised)] border border-[var(--ss-accent-border)] px-3.5 py-2 rounded-full shadow-[var(--ss-shadow-window)]">
+        <span className="w-2 h-2 rounded-full bg-[var(--ss-accent)] animate-pulse" />
         <div className="flex flex-col">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent-primary)] animate-pulse">
-            Đang trong cuộc gọi
+          <span className="text-[11px] font-medium text-[var(--ss-text-strong)]">
+            Voice Studio đang hoạt động
           </span>
-          <span className="text-xs text-[var(--text-secondary)] truncate max-w-[100px]">
-            {isAiSpeaking ? "Lunaa đang nói..." : "Đang nghe..."}
+          <span className="text-[11px] text-[var(--ss-text)]">
+            {isAiSpeaking ? "Luna đang phản hồi..." : "Đang lắng nghe..."}
           </span>
         </div>
-        <div className="relative">
-          {isAiSpeaking && (
-            <motion.div
-              initial={{ scale: 1, opacity: 0.5 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 1, repeat: Infinity }}
-              className="absolute inset-x-0 rounded-full bg-[var(--accent-primary)] opacity-30"
-            />
-          )}
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center shadow-lg">
-            {isAiSpeaking ? "✋" : "🎤"}
-          </div>
-        </div>
-        <button 
+        <button
           onClick={stopCall}
-          className="w-10 h-10 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors"
+          className="w-7 h-7 rounded-full bg-[var(--ss-danger-soft)] hover:bg-[var(--ss-danger)] text-[var(--ss-danger)] hover:text-white flex items-center justify-center transition-colors"
+          title="Kết thúc cuộc gọi"
         >
-          <PhoneOff size={18} />
+          <PhoneOff size={14} strokeWidth={1.5} />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-4 w-full h-full">
-      <div className="flex w-full items-center justify-center gap-8">
-        {/* Small avatar orb */}
-        <div className="relative flex items-center justify-center w-16 h-16">
-          {isListening && !isAiSpeaking && (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
-              transition={{ duration: 1, repeat: Infinity }}
-              className="absolute inset-x-0 rounded-full bg-green-500 blur-lg"
-            />
-          )}
-
-          {isAiSpeaking && (
-            <motion.div
-              initial={{ scale: 1, opacity: 0.5 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
-              className="absolute inset-0 rounded-full bg-[var(--accent-primary)] opacity-30"
-            />
-          )}
-
-          <div
-            className={`z-10 w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg transition-all duration-500 ${
+    <div className="flex flex-col items-center justify-center p-4 sm:p-6 w-full h-full">
+      <div className="w-full max-w-md bg-[var(--ss-surface)] border border-[var(--ss-line)] rounded-[var(--ss-radius-window)] shadow-[var(--ss-shadow-window)] overflow-hidden">
+        {/* 38px Window Chrome */}
+        <div className="h-[38px] px-4 bg-[var(--ss-chrome)] border-b border-[var(--ss-line)] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AudioLines size={14} strokeWidth={1.5} className="text-[var(--ss-icon)]" />
+            <span className="text-[12px] font-medium text-[var(--ss-text)]">
+              Luna Voice Studio • ElevenLabs
+            </span>
+          </div>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10.5px] font-medium ${
               isActive
-                ? isListening && !isAiSpeaking
-                  ? "bg-green-500 scale-125 animate-pulse"
-                  : isAiSpeaking
-                    ? "bg-gradient-to-tr from-orange-400 to-red-500 scale-110"
-                    : "bg-gradient-to-tr from-blue-500 to-cyan-400 scale-110"
-                : "bg-gray-800 scale-100 hover:scale-105 cursor-pointer"
+                ? "bg-[var(--ss-accent-soft)] text-[var(--ss-accent-text)] border border-[var(--ss-accent-border)]"
+                : "bg-[var(--ss-raised)] text-[var(--ss-text-faint)] border border-[var(--ss-line)]"
             }`}
           >
-            {isAiSpeaking ? "✋" : isActive ? <Mic size={20} className="text-white" /> : "🌙"}
-          </div>
+            {isActive ? "Đang kết nối" : "Chờ kết nối"}
+          </span>
         </div>
 
-        {/* Action Button */}
-        <div>
-          {!isActive ? (
-            <button
-              onClick={startCall}
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 text-white shadow-lg transition-all"
+        {/* Studio Stage Body */}
+        <div className="p-8 flex flex-col items-center text-center">
+          <div className="relative flex items-center justify-center w-24 h-24 mb-6">
+            {isActive && (
+              <motion.div
+                animate={{
+                  scale: isAiSpeaking ? [1, 1.28, 1] : [1, 1.14, 1],
+                  opacity: isAiSpeaking ? [0.35, 0.12, 0.35] : [0.22, 0.08, 0.22],
+                }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-0 rounded-full bg-[var(--ss-accent)]"
+              />
+            )}
+
+            <div
+              className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all border ${
+                isActive
+                  ? isAiSpeaking
+                    ? "bg-[var(--ss-accent)] border-[var(--ss-accent-border)] text-white"
+                    : "bg-[var(--ss-raised)] border-[var(--ss-accent-border)] text-[var(--ss-accent-text)]"
+                  : "bg-[var(--ss-raised)] border-[var(--ss-line)] text-[var(--ss-icon)]"
+              }`}
             >
-              <PhoneCall size={20} />
-            </button>
-          ) : (
-            <button
-              onClick={stopCall}
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all"
-            >
-              <PhoneOff size={20} />
-            </button>
-          )}
+              {isAiSpeaking ? (
+                <AudioLines size={22} strokeWidth={1.5} />
+              ) : (
+                <Mic size={20} strokeWidth={1.5} />
+              )}
+            </div>
+          </div>
+
+          <div className="text-[15px] font-semibold text-[var(--ss-text-strong)] mb-1">
+            {isActive
+              ? isAiSpeaking
+                ? "Luna đang chia sẻ"
+                : "Đang lắng nghe bạn..."
+              : "Không gian trò chuyện bằng giọng nói"}
+          </div>
+          <p className="text-[12.5px] text-[var(--ss-text)] max-w-xs leading-relaxed">
+            {statusText}
+          </p>
+
+          <div className="mt-7 pt-5 border-t border-[var(--ss-line-faint)] w-full flex items-center justify-center gap-3">
+            {!isActive ? (
+              <button
+                type="button"
+                onClick={startCall}
+                className="h-9 px-5 rounded-[var(--ss-radius-md)] bg-[var(--ss-accent)] hover:bg-[var(--ss-accent-hover)] text-white text-[13px] font-medium flex items-center gap-2 transition-colors"
+              >
+                <PhoneCall size={15} strokeWidth={1.5} />
+                <span>Bắt đầu phiên gọi</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stopCall}
+                className="h-9 px-5 rounded-[var(--ss-radius-md)] bg-[var(--ss-danger-soft)] hover:bg-[var(--ss-danger)] text-[var(--ss-danger)] hover:text-white border border-red-500/20 text-[13px] font-medium flex items-center gap-2 transition-colors"
+              >
+                <PhoneOff size={15} strokeWidth={1.5} />
+                <span>Kết thúc cuộc gọi</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

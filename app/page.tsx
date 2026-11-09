@@ -3,6 +3,7 @@
 import { useChat } from "ai/react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
+import { ArrowUpRight, AudioLines, Sparkles } from "lucide-react";
 
 import Header from "@/components/layout/Header";
 import MessageBubble, {
@@ -16,34 +17,45 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 import HistorySidebar from "@/components/layout/HistorySidebar";
 import SessionDetailModal from "@/components/modals/SessionDetailModal";
 import NewSessionPromptModal from "@/components/modals/NewSessionPromptModal";
+import LunaaStageHero from "@/components/stageshow/LunaaStageHero";
 import { useSpeech } from "@/hooks/useSpeech";
-import { Phone, MessageCircle } from "lucide-react";
-import { initLocalDB, saveToLocalDB, searchLocalDB, saveSessionToIDB, getAllSessionsFromIDB, type SessionHistory } from "@/lib/local-rag";
-
+import {
+  initLocalDB,
+  saveToLocalDB,
+  saveSessionToIDB,
+  getAllSessionsFromIDB,
+  type SessionHistory,
+} from "@/lib/local-rag";
 
 export default function Home() {
   const [showSummary, setShowSummary] = useState(false);
   const [summaryText, setSummaryText] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [isCallMode, setIsCallMode] = useState(false); // Toggle mode
+  const [isCallMode, setIsCallMode] = useState(false);
   const [sessionHistory, setSessionHistory] = useState<SessionHistory[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState("Đang khởi động hệ thống...");
-  
-  // Voice Engine State
-  const [voiceEngine, setVoiceEngine] = useState<'gemini' | 'elevenlabs'>('gemini');
-  const [elevenAgentId, setElevenAgentId] = useState<string>('');
+  const [loadingMessage, setLoadingMessage] = useState(
+    "Đang khởi động hệ thống..."
+  );
 
-  // History UI State
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<SessionHistory | null>(null);
+  // Voice Engine State
+  const [voiceEngine, setVoiceEngine] = useState<"gemini" | "elevenlabs">(
+    "gemini"
+  );
+  const [elevenAgentId, setElevenAgentId] = useState<string>("");
+
+  // Studio Sidebar State (Docked open by default on desktop)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [selectedSession, setSelectedSession] = useState<SessionHistory | null>(
+    null
+  );
   const [showNewSessionPrompt, setShowNewSessionPrompt] = useState(false);
   const [useRAGContext, setUseRAGContext] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastAiMessageRef = useRef<string>("");
-  const localContextRef = useRef<string | null>(null); // Holds local RAG context for current session
-  const [preloadedLocalContext, setPreloadedLocalContext] = useState<string>("");
+  const [preloadedLocalContext, setPreloadedLocalContext] =
+    useState<string>("");
 
   const {
     isListening,
@@ -68,9 +80,7 @@ export default function Home() {
     setInput,
   } = useChat({
     api: "/api/chat",
-    // Inject localContext (from local RAG search) into every chat request
     fetch: async (url, options) => {
-      // Use pre-loaded local context if available and permitted
       if (options?.body) {
         try {
           const body = JSON.parse(options.body as string);
@@ -92,13 +102,13 @@ export default function Home() {
   }, [messages]);
 
   useEffect(() => {
-    fetch('/api/voice-engine')
-      .then(res => res.json())
-      .then(data => {
+    fetch("/api/voice-engine")
+      .then((res) => res.json())
+      .then((data) => {
         setVoiceEngine(data.engine);
         setElevenAgentId(data.elevenAgentId);
       })
-      .catch(err => console.error("Failed to fetch voice engine:", err));
+      .catch((err) => console.error("Failed to fetch voice engine:", err));
   }, []);
 
   // Load history from IndexedDB + init local RAG DB
@@ -107,60 +117,58 @@ export default function Home() {
       setSessionHistory(sessions);
     });
 
-    // Initialize local DB (loads persisted docs from IndexedDB)
     setIsInitializing(true);
-    initLocalDB().then(async () => {
-      try {
-        setLoadingMessage("Đang đọc bối cảnh từ các phiên trước...");
-        const { debugGetAllDocs } = await import("@/lib/local-rag");
-        const docs = await debugGetAllDocs();
-        
-        if (docs.length > 0) {
-          // Check cache: if doc count is same as last time, use cached summary
-          const cachedSummary = localStorage.getItem("lunaa-context-summary");
-          const cachedCount = localStorage.getItem("lunaa-context-count");
-          
-          if (cachedSummary && cachedCount && parseInt(cachedCount) === docs.length) {
-            console.log("🤖 [LocalRAG] Using cached context summary.");
-            setPreloadedLocalContext(cachedSummary);
-          } else {
-            console.log("🤖 [LocalRAG] Context changed or no cache. Summarizing...");
-            setLoadingMessage("AI đang tổng hợp hành trình của bạn...");
-            const texts = docs.map(d => d.text);
-            const response = await fetch("/api/summarize-context", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contextItems: texts }),
-            });
-            const data = await response.json();
-            if (data.summary) {
-              setPreloadedLocalContext(data.summary);
-              localStorage.setItem("lunaa-context-summary", data.summary);
-              localStorage.setItem("lunaa-context-count", docs.length.toString());
-              console.log("🤖 [LocalRAG] AI-Driven Context Summary:\n", data.summary);
+    initLocalDB()
+      .then(async () => {
+        try {
+          setLoadingMessage("Đang đọc bối cảnh từ các phiên trước...");
+          const { debugGetAllDocs } = await import("@/lib/local-rag");
+          const docs = await debugGetAllDocs();
+
+          if (docs.length > 0) {
+            const cachedSummary = localStorage.getItem("lunaa-context-summary");
+            const cachedCount = localStorage.getItem("lunaa-context-count");
+
+            if (
+              cachedSummary &&
+              cachedCount &&
+              parseInt(cachedCount) === docs.length
+            ) {
+              setPreloadedLocalContext(cachedSummary);
+            } else {
+              setLoadingMessage("Đang tổng hợp hành trình của bạn...");
+              const texts = docs.map((d) => d.text);
+              const response = await fetch("/api/summarize-context", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contextItems: texts }),
+              });
+              const data = await response.json();
+              if (data.summary) {
+                setPreloadedLocalContext(data.summary);
+                localStorage.setItem("lunaa-context-summary", data.summary);
+                localStorage.setItem(
+                  "lunaa-context-count",
+                  docs.length.toString()
+                );
+              }
             }
           }
-        } else {
-          console.log("🤖 [LocalRAG] No local history found.");
+        } catch (e) {
+          console.warn("[LocalRAG] Pre-load failed:", e);
+        } finally {
+          setIsInitializing(false);
         }
-      } catch (e) {
-        console.warn('[LocalRAG] Pre-load failed:', e);
-      } finally {
+      })
+      .catch((e) => {
+        console.warn("[LocalRAG] Init failed:", e);
         setIsInitializing(false);
-        setShowNewSessionPrompt(true);
-      }
-    }).catch((e) => {
-      console.warn('[LocalRAG] Init failed:', e);
-      setIsInitializing(false);
-    });
+      });
   }, []);
 
-  // Intercept form submit to inject local RAG context before sending to server
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
-
-    // Local RAG context is now pre-loaded and injected via fetch-override above
     _handleSubmit(e);
   };
 
@@ -186,7 +194,7 @@ export default function Home() {
     }
   }, [isListening, transcript, setInput]);
 
-  // End session → get summary
+  // End session -> get summary
   const handleEndSession = async () => {
     cancelSpeech();
     setShowSummary(true);
@@ -202,8 +210,6 @@ export default function Home() {
       const data = await res.json();
       const newSummary = data.summary ?? "Không thể tạo tổng kết lúc này.";
       setSummaryText(newSummary);
-
-      // We defer actually saving to IDB to `handleSaveSession` when the user enters a title.
     } catch {
       setSummaryText("Đã xảy ra lỗi khi tổng kết. Vui lòng thử lại.");
     } finally {
@@ -225,19 +231,17 @@ export default function Home() {
       summary: summaryText,
       messages: messages,
     };
-    
-    // Save locally
+
     const updatedHistory = [historyEntry, ...sessionHistory];
     setSessionHistory(updatedHistory);
     saveSessionToIDB(historyEntry);
 
-    // Save to LocalRAG Engine
     saveToLocalDB(summaryId, summaryText, {
-      type: 'session_summary',
+      type: "session_summary",
       messageCount: messages.length,
       timestamp: historyEntry.timestamp,
-    }).catch((e) => console.warn('[LocalRAG] Save summary failed:', e));
-    
+    }).catch((e) => console.warn("[LocalRAG] Save summary failed:", e));
+
     setShowSummary(false);
     handleNewSession();
   };
@@ -249,7 +253,10 @@ export default function Home() {
     cancelSpeech();
   };
 
-  const handleNewSessionConfirm = (useRAG: boolean, mode: "voice" | "text") => {
+  const handleNewSessionConfirm = (
+    useRAG: boolean,
+    mode: "voice" | "text"
+  ) => {
     setUseRAGContext(useRAG);
     setIsCallMode(mode === "voice");
     setShowNewSessionPrompt(false);
@@ -261,119 +268,165 @@ export default function Home() {
           {
             id: `greeting_${Date.now()}`,
             role: "assistant",
-            content: "Xin chào, tôi là Luna. Tôi ở đây để lắng nghe và đồng hành cùng bạn. Hôm nay bạn cảm thấy thế nào?",
-          }
+            content:
+              "Xin chào, mình là Luna. Mình ở đây để lắng nghe và đồng hành cùng bạn. Hôm nay bạn cảm thấy thế nào?",
+          },
         ]);
       }, 100);
     }
   };
 
   return (
-    <>
-      {/* Ambient background */}
-      <div className="bg-ambient" />
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--ss-canvas)] text-[var(--ss-text-strong)]">
+      {isInitializing && <LoadingOverlay message={loadingMessage} />}
 
-      {/* App shell */}
-      <main className="relative z-10 flex flex-col h-screen max-w-3xl mx-auto">
-        {isInitializing && <LoadingOverlay message={loadingMessage} />}
-        
+      {/* Left Docked Studio Sidebar */}
+      <HistorySidebar
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        sessions={sessionHistory}
+        onSelectSession={setSelectedSession}
+        onNewSession={() => setShowNewSessionPrompt(true)}
+        useRAGContext={useRAGContext}
+        onToggleRAGContext={setUseRAGContext}
+        preloadedContextSummary={preloadedLocalContext}
+      />
+
+      {/* Main Studio Workspace */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
         <Header
           onEndSession={handleEndSession}
           isLoading={isLoading}
           isSpeaking={isSpeaking}
           onCancelSpeech={cancelSpeech}
-          onOpenHistory={() => setIsHistoryOpen(true)}
+          onOpenHistory={() => setIsHistoryOpen((prev) => !prev)}
           onNewSessionBtnClick={() => setShowNewSessionPrompt(true)}
+          isCallMode={isCallMode}
+          onToggleCallMode={setIsCallMode}
+          useRAGContext={useRAGContext}
+          hasMessages={messages.length > 0}
         />
 
-        {/* Mode Toggle Switch (Removed) */}
-
-        {/* Main Content Area */}
+        {/* Workspace Stage */}
         {!isCallMode ? (
-          <main className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
-              {/* Welcome state */}
-          {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center gap-6 text-center px-8">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-secondary)] flex items-center justify-center text-4xl shadow-2xl shadow-[var(--accent-glow)]">
-                🌙
-              </div>
-              <div>
-                <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">
-                  Xin chào, tôi là Luna
-                </h2>
-                <p className="text-[var(--text-secondary)] text-sm leading-relaxed max-w-sm">
-                  Tôi ở đây để lắng nghe và đồng hành cùng bạn. Hãy chia sẻ
-                  điều bạn đang suy nghĩ hay cảm nhận hôm nay — không có gì là
-                  quá lớn hay quá nhỏ.
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2 mt-2">
-                {[
-                  "Tôi đang cảm thấy lo lắng",
-                  "Tôi cần ai đó lắng nghe",
-                  "Tôi muốn quản lý stress tốt hơn",
-                ].map((suggestion) => (
+          <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+            {messages.length === 0 ? (
+              <div className="max-w-3xl mx-auto py-2 sm:py-4 flex flex-col gap-6">
+                {/* Editorial Intro Header */}
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-1">
+                  <div>
+                    <div className="text-[11.5px] font-medium uppercase tracking-wider text-[var(--ss-accent-text)] mb-1">
+                      Không gian tham vấn cá nhân
+                    </div>
+                    <div className="text-[20px] sm:text-[22px] font-semibold tracking-tight text-[var(--ss-text-strong)]">
+                      Hôm nay tâm trí bạn đang dừng ở điều gì?
+                    </div>
+                    <p className="text-[13px] text-[var(--ss-text)] mt-1 max-w-xl leading-relaxed">
+                      Mọi cuộc trò chuyện và ký ức bối cảnh được lưu trữ cục bộ
+                      trên trình duyệt của bạn. Bắt đầu bằng văn bản hoặc chuyển
+                      sang Voice Studio bất cứ lúc nào.
+                    </p>
+                  </div>
+
                   <button
-                    key={suggestion}
-                    onClick={() => setInput(suggestion)}
-                    className="px-4 py-2 rounded-full text-sm text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition-all"
+                    type="button"
+                    onClick={() => setIsCallMode(true)}
+                    className="self-start sm:self-auto shrink-0 h-8 px-3.5 rounded-[var(--ss-radius-md)] bg-[var(--ss-surface)] hover:bg-[var(--ss-raised)] border border-[var(--ss-line)] text-[12px] font-medium text-[var(--ss-text-strong)] flex items-center gap-1.5 transition-colors"
                   >
-                    {suggestion}
+                    <AudioLines
+                      size={13}
+                      strokeWidth={1.5}
+                      className="text-[var(--ss-accent-text)]"
+                    />
+                    <span>Mở Voice Studio</span>
                   </button>
-                ))}
+                </div>
+
+                {/* Stageshow Interactive Scene Preview */}
+                <LunaaStageHero />
+
+                {/* Starter Prompts */}
+                <div className="pt-1">
+                  <div className="text-[11.5px] font-medium text-[var(--ss-text-faint)] mb-2.5">
+                    Gợi ý bắt đầu cuộc trò chuyện
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Mình đang cảm thấy lo âu và khó tập trung",
+                      "Mình cần một người lắng nghe chuyện hôm nay",
+                      "Làm sao để cân bằng lại giấc ngủ và công việc?",
+                      "Mình cảm thấy kiệt sức nhưng không rõ lý do",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => setInput(suggestion)}
+                        className="px-3.5 py-2 rounded-[var(--ss-radius-md)] text-[12.5px] text-[var(--ss-text)] bg-[var(--ss-surface)] border border-[var(--ss-line)] hover:border-[var(--ss-accent-border)] hover:text-[var(--ss-text-strong)] hover:bg-[var(--ss-raised)] flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>{suggestion}</span>
+                        <ArrowUpRight
+                          size={13}
+                          strokeWidth={1.5}
+                          className="text-[var(--ss-icon-faint)]"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Messages */}
-          <AnimatePresence mode="popLayout">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-            {isLoading && <TypingIndicator key="typing" />}
-          </AnimatePresence>
-
-              <div ref={messagesEndRef} />
-            </main>
+            ) : (
+              <div className="max-w-3xl mx-auto space-y-5 pb-4">
+                <AnimatePresence mode="popLayout">
+                  {messages.map((message) => (
+                    <MessageBubble key={message.id} message={message} />
+                  ))}
+                  {isLoading && <TypingIndicator key="typing" />}
+                </AnimatePresence>
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </main>
         ) : (
-          <main className="flex-1 flex flex-col items-center justify-center">
-            {voiceEngine === 'elevenlabs' ? (
-              <ElevenLabsCall 
-                messages={messages} 
-                setMessages={setMessages} 
-                isViewVisible={isCallMode} 
+          <main className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
+            {voiceEngine === "elevenlabs" ? (
+              <ElevenLabsCall
+                messages={messages}
+                setMessages={setMessages}
+                isViewVisible={isCallMode}
                 agentId={elevenAgentId}
               />
             ) : (
-              <CustomRealtimeCall 
-                messages={messages} 
+              <CustomRealtimeCall
+                messages={messages}
                 setMessages={setMessages}
-                append={append} 
-                stop={stop} 
+                append={append}
+                stop={stop}
                 isLoading={isLoading}
                 isViewVisible={isCallMode}
-                preloadedLocalContext={useRAGContext ? preloadedLocalContext : ""}
+                preloadedLocalContext={
+                  useRAGContext ? preloadedLocalContext : ""
+                }
               />
             )}
           </main>
         )}
 
         {!isCallMode && (
-            <ChatInput
-              input={input}
-              onInputChange={handleInputChange}
-              onSubmit={handleSubmit}
-              isLoading={isLoading}
-              isListening={isListening}
-              isSpeaking={isSpeaking}
-              transcript={transcript}
-              onStartListening={startListening}
-              onStopListening={stopListening}
-              onStop={stop}
-              isSupported={isSupported}
-            />
-          )}
-      </main>
+          <ChatInput
+            input={input}
+            onInputChange={handleInputChange}
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+            isListening={isListening}
+            isSpeaking={isSpeaking}
+            transcript={transcript}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+            onStop={stop}
+            isSupported={isSupported}
+          />
+        )}
+      </div>
 
       {/* Summary modal */}
       <SummaryModal
@@ -397,18 +450,6 @@ export default function Home() {
         onClose={() => setShowNewSessionPrompt(false)}
         onConfirm={handleNewSessionConfirm}
       />
-
-      {/* History Sidebar */}
-      <HistorySidebar
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-        sessions={sessionHistory}
-        onSelectSession={setSelectedSession}
-        onNewSession={() => {
-          setIsHistoryOpen(false);
-          setShowNewSessionPrompt(true);
-        }}
-      />
-    </>
+    </div>
   );
 }
