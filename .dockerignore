@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env*
+*.pem
+*.log
+.DS_Store
+.import-checkpoint.json

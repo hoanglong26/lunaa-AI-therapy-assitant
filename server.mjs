@@ -8,8 +8,8 @@ import { WebSocketServer } from 'ws';
 import { handleWebSocketConnection } from './lib/websocket-handler.mjs';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
-const port = 3000;
+const hostname = process.env.HOSTNAME || '0.0.0.0';
+const port = parseInt(process.env.PORT || '3000', 10);
 
 // Khởi tạo Next.js App
 const app = next({ dev, hostname, port });
